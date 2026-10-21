@@ -1,0 +1,46 @@
+@startuml
+!pragma layout smetana
+skinparam shadowing false
+left to right direction
+skinparam nodesep 45
+skinparam ranksep 65
+actor Cliente
+actor GIPHY
+rectangle "API Prex" {
+usecase "Login email/password\nToken personal 30 minutos" as Login
+usecase "Buscar GIFs" as Search
+usecase "Consultar GIF por ID" as Get
+usecase "Guardar favorito" as Save
+usecase "Autenticar Bearer\nPassport" as Auth
+usecase "Validar entrada" as Validate
+usecase "Auditar interacción\nactor, servicio, cuerpos, status, IP" as Audit
+}
+Login -[hidden]down-> Search
+Search -[hidden]down-> Get
+Get -[hidden]down-> Save
+Auth -[hidden]down-> Validate
+Validate -[hidden]down-> Audit
+Cliente -right-> Login
+Cliente -right-> Search
+Cliente -right-> Get
+Cliente -right-> Save
+Search .right.> Auth : <<include>>
+Get .right.> Auth : <<include>>
+Save .right.> Auth : <<include>>
+Login .right.> Validate : <<include>>
+Search .right.> Validate : <<include>>
+Get .right.> Validate : <<include>>
+Save .right.> Validate : <<include>>
+Login .right.> Audit : <<include>>
+Search .right.> Audit : <<include>>
+Get .right.> Audit : <<include>>
+Save .right.> Audit : <<include>>
+GIPHY -left-> Search
+GIPHY -left-> Get
+GIPHY -left-> Save
+note bottom of Audit
+Éxitos y errores; secretos redactados.
+Favorito + auditoría 201: misma transacción MySQL.
+Caída MySQL: fallback sin recuperación garantizada.
+end note
+@enduml

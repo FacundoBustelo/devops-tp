@@ -1,0 +1,45 @@
+@startuml
+!pragma layout smetana
+skinparam shadowing false
+hide circle
+skinparam linetype ortho
+entity "users" as users {
+  id bigint PK
+  name varchar
+  email varchar UNIQUE
+  email_verified_at timestamp NULL
+  password varchar
+  remember_token varchar NULL
+  created_at, updated_at timestamp NULL
+  deleted_at timestamp NULL (soft delete)
+}
+entity "favorite_gifs" as favorite_gifs {
+  id bigint PK
+  user_id bigint FK RESTRICT
+  gif_id varchar(128) utf8mb4_0900_bin
+  alias varchar(100)
+  created_at, updated_at timestamp NULL
+  UNIQUE(user_id, gif_id)
+}
+entity "api_interactions" as api_interactions {
+  id bigint PK
+  request_id char(36) UNIQUE
+  user_id bigint NULL FK SET NULL
+  method varchar(16), service varchar
+  request_data JSON
+  status smallint unsigned
+  response_data JSON NULL
+  ip varchar(45) NULL
+  occurred_at datetime(6) UTC
+}
+users ||--o{ favorite_gifs : "FK user_id / RESTRICT"
+users |o--o{ api_interactions : "FK user_id nullable / SET NULL"
+legend bottom
+Modelo de datos del proyecto: usuarios, favoritos y auditoría.
+Línea continua: FK física.
+NULL explícito; demás columnas NOT NULL. PK/UNIQUE/INDEX indicados.
+users.deleted_at no ejecuta ON DELETE; acciones aplican al borrado físico.
+GIF_ID compara mayúsculas, Unicode y espacios finales exactos en MySQL 8.4.
+Tablas auxiliares de Laravel y Passport en erd-completo.
+endlegend
+@enduml

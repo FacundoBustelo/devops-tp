@@ -1,0 +1,51 @@
+@startuml
+!pragma layout smetana
+skinparam shadowing false
+actor Cliente
+participant "AuditHttp / ApiErrors" as HTTP
+participant "auth:api / Passport" as Auth
+participant "GetGifByIdRequest / GetGifByIdController" as Controller
+participant "GetGifById" as Use
+participant "GifCatalog" as Port
+participant "GiphyHttpGifCatalog" as Adapter
+participant GIPHY
+ database MySQL
+participant "RecordInteraction / Redactor\nInteractionRepository / EloquentInteractionRepository" as Audit
+Cliente -> HTTP : GET /api/v1/gifs/{id} / Bearer
+HTTP -> Auth : validar firma, expiración, revocación
+Auth -> MySQL : usuario / token persistido
+alt token ausente, inválido, vencido o revocado
+ Auth --> HTTP : 401
+else autenticado
+ Auth --> Controller : actor verificado
+ Controller -> Controller : validar solo ruta
+ alt validación inválida
+  Controller --> HTTP : 422
+ else válida
+  Controller -> Use : GetGifById::execute
+  Use -> Port : GifCatalog::findById(GifId exacto)
+  Port -> Adapter : GiphyHttpGifCatalog
+  Adapter -> GIPHY : GET HTTPS / clave solo servidor\ncodificación única, sin reintentos
+  alt respuesta válida
+   GIPHY --> Adapter : JSON
+   Adapter --> Use : DTOs de Dominio
+   Use --> Controller : resultado
+   Controller --> HTTP : 200 data
+  else ausencia (solo consulta)
+   Adapter --> HTTP : 404 (búsqueda 404 externo: 502)
+  else JSON/estructura/status inesperado
+   Adapter --> HTTP : 502
+  else clave ausente, cuota o indisponibilidad
+   Adapter --> HTTP : 503
+  else timeout
+   Adapter --> HTTP : 504
+  end
+ end
+end
+HTTP -> Audit : respuesta final / redacción / actor autenticado
+Audit -> MySQL : insertar api_interactions
+alt persistencia de auditoría falla
+ Audit -> HTTP : fallback mínimo; conservar respuesta
+end
+HTTP --> Cliente : status, JSON, X-Request-ID
+@enduml

@@ -1,0 +1,154 @@
+@startuml
+!pragma layout smetana
+skinparam shadowing false
+hide circle
+skinparam linetype ortho
+entity "users" as users {
+  id bigint PK
+  name varchar
+  email varchar UNIQUE
+  email_verified_at timestamp NULL
+  password varchar
+  remember_token varchar NULL
+  created_at, updated_at timestamp NULL
+  deleted_at timestamp NULL (soft delete)
+}
+entity "favorite_gifs" as favorite_gifs {
+  id bigint PK
+  user_id bigint FK RESTRICT
+  gif_id varchar(128) utf8mb4_0900_bin
+  alias varchar(100)
+  created_at, updated_at timestamp NULL
+  UNIQUE(user_id, gif_id)
+}
+entity "api_interactions" as api_interactions {
+  id bigint PK
+  request_id char(36) UNIQUE
+  user_id bigint NULL FK SET NULL
+  method varchar(16), service varchar
+  request_data JSON
+  status smallint unsigned
+  response_data JSON NULL
+  ip varchar(45) NULL
+  occurred_at datetime(6) UTC
+}
+entity "oauth_clients" as oauth_clients {
+  id char(36) PK
+  owner_type varchar NULL
+  owner_id bigint NULL
+  INDEX(owner_type, owner_id)
+  name varchar
+  secret, provider varchar NULL
+  redirect_uris, grant_types text
+  revoked boolean
+  created_at, updated_at timestamp NULL
+}
+entity "oauth_auth_codes" as oauth_auth_codes {
+  id char(80) PK
+  user_id bigint INDEX
+  client_id char(36)
+  scopes text NULL
+  revoked boolean
+  expires_at datetime NULL
+}
+entity "oauth_access_tokens" as oauth_access_tokens {
+  id char(80) PK
+  user_id bigint NULL INDEX
+  client_id char(36)
+  name varchar NULL
+  scopes text NULL
+  revoked boolean
+  created_at, updated_at timestamp NULL
+  expires_at datetime NULL
+}
+entity "oauth_refresh_tokens" as oauth_refresh_tokens {
+  id char(80) PK
+  access_token_id char(80) INDEX
+  revoked boolean
+  expires_at datetime NULL
+}
+entity "oauth_device_codes" as oauth_device_codes {
+  id char(80) PK
+  user_id bigint NULL INDEX
+  client_id char(36) INDEX
+  user_code char(8) UNIQUE
+  scopes text
+  revoked boolean
+  user_approved_at, last_polled_at, expires_at datetime NULL
+}
+entity "password_reset_tokens" as password_reset_tokens {
+  email varchar PK
+  token varchar
+  created_at timestamp NULL
+}
+entity "sessions" as sessions {
+  id varchar PK
+  user_id bigint NULL INDEX
+  ip_address varchar(45) NULL
+  user_agent text NULL
+  payload longtext
+  last_activity int INDEX
+}
+entity "cache" as cache {
+  key varchar PK
+  value mediumtext
+  expiration bigint INDEX
+}
+entity "cache_locks" as cache_locks {
+  key varchar PK
+  owner varchar
+  expiration bigint INDEX
+}
+entity "jobs" as jobs {
+  id bigint PK
+  queue varchar INDEX
+  payload longtext
+  attempts smallint unsigned
+  reserved_at int unsigned NULL
+  available_at, created_at int unsigned
+}
+entity "job_batches" as job_batches {
+  id varchar PK
+  name varchar
+  total_jobs, pending_jobs, failed_jobs int
+  failed_job_ids longtext
+  options mediumtext NULL
+  cancelled_at, finished_at int NULL
+  created_at int
+}
+entity "failed_jobs" as failed_jobs {
+  id bigint PK
+  uuid varchar UNIQUE
+  connection text, queue text
+  payload, exception longtext
+  failed_at timestamp DEFAULT CURRENT_TIMESTAMP
+  INDEX(connection, queue, failed_at)
+}
+entity "migrations" as migrations {
+  id int unsigned PK
+  migration varchar
+  batch int
+}
+users ||--o{ favorite_gifs : "FK user_id / RESTRICT"
+users |o--o{ api_interactions : "FK user_id nullable / SET NULL"
+users |o..o{ oauth_access_tokens : "lógica user_id nullable"
+users ||..o{ oauth_auth_codes : "lógica user_id"
+users |o..o{ oauth_device_codes : "lógica user_id nullable"
+oauth_clients ||..o{ oauth_auth_codes : "lógica client_id"
+oauth_clients ||..o{ oauth_access_tokens : "lógica client_id"
+oauth_clients ||..o{ oauth_device_codes : "lógica client_id"
+oauth_access_tokens ||..o{ oauth_refresh_tokens : "lógica access_token_id"
+users |o..o{ sessions : "lógica user_id nullable"
+users |o..o{ password_reset_tokens : "lógica email (no FK)"
+users |o..o{ oauth_clients : "owner polimórfico opcional; no fijado a users"
+legend bottom
+Línea continua: FK física (solo favoritos y auditoría).
+Línea punteada: relación lógica, sin integridad referencial SQL.
+NULL explícito; demás columnas NOT NULL. PK/UNIQUE/INDEX indicados.
+Passport foreignId/foreignUuid NO implica constrained().
+owner_type/owner_id puede representar otros modelos; cliente personal sin owner.
+users.deleted_at no ejecuta ON DELETE; acciones aplican al borrado físico.
+GIF_ID compara mayúsculas, Unicode y espacios finales exactos en MySQL 8.4.
+Tablas auxiliares presentes aunque sesión=file y queue=sync.
+endlegend
+@enduml
