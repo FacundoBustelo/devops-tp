@@ -1,0 +1,75 @@
+@startuml
+!pragma layout smetana
+skinparam shadowing false
+actor Cliente
+participant "AuditHttp / ApiErrors" as HTTP
+participant "auth:api / Passport" as Auth
+participant "SaveFavoriteGifRequest\nSaveFavoriteGifController" as Controller
+participant "SaveFavoriteGif" as Use
+participant "GifCatalog\nGiphyHttpGifCatalog" as Catalog
+participant GIPHY
+participant "SaveFavoriteTransaction" as Tx
+participant "FavoriteGifRepository\nEloquentFavoriteGifRepository" as Repo
+participant "HttpInteractionCapture\nRecordInteraction::strictly / Redactor\nInteractionRepository / EloquentInteractionRepository" as Audit
+database MySQL
+Cliente -> HTTP : POST /api/v1/favorites\nGIF_ID, ALIAS, USER_ID / Bearer
+HTTP -> Auth : firma, vencimiento, revocación / User
+Auth -> MySQL : token y usuario
+alt token inválido
+ Auth --> HTTP : 401
+else autenticado
+ Auth --> Controller : actor
+ Controller -> Controller : validar JSON exclusivo
+ alt entrada inválida
+  Controller --> HTTP : 422
+ else válida
+  Controller -> Use : prepare(actor, owner, GifId, FavoriteAlias)
+  alt propietario distinto
+   Use --> HTTP : 403 (sin proveedor)
+  else propietario correcto
+   Use -> Catalog : findById / fuera de transacción
+   Catalog -> GIPHY : GET /gifs/{id} / sin reintentos
+   alt ausente / proveedor incompatible / no disponible / timeout
+    Catalog --> HTTP : 404 / 502 / 503 / 504
+   else existe
+    Catalog --> Use : Gif
+    Use --> Controller : PreparedFavorite
+    Controller -> Tx : execute(entry, request)
+    Tx -> MySQL : BEGIN
+    Tx -> Use : persist(entry)
+    Use -> Repo : insert
+    Repo -> MySQL : INSERT favorite_gifs\nUNIQUE(user_id, gif_id exacto)
+    alt éxito
+     Repo --> Tx : FavoriteGif
+     Tx -> Tx : serializar JsonResponse 201
+     Tx -> Audit : capturar respuesta / redactar / persistir estrictamente
+     Audit -> MySQL : INSERT api_interactions 201\nmisma conexión y transacción
+     Tx -> MySQL : registrar callback afterCommit / COMMIT
+     MySQL --> Tx : commit confirmado
+     Tx -> HTTP : callback AuditContext::markCommitted
+     Tx --> Controller : respuesta 201
+     Controller --> HTTP : 201
+     HTTP -> HTTP : contexto confirmado: omitir segunda auditoría
+    else duplicado / persistencia / serialización / auditoría fallida
+     MySQL --> Tx : excepción -> 409 duplicado / 500 otro fallo
+     Tx -> MySQL : ROLLBACK favorito + auditoría 201
+     Tx -> HTTP : callback descartado; error sanitizado
+    end
+   end
+  end
+ end
+end
+alt contexto no confirmado (error)
+ HTTP -> Audit : respuesta final de error / fuera de transacción
+ Audit -> MySQL : INSERT api_interactions status final
+ alt fallo MySQL al auditar
+  Audit -> HTTP : fallback stderr; sin garantía durable
+ end
+end
+HTTP --> Cliente : status, JSON, X-Request-ID
+note over Tx, MySQL
+La llamada externa ocurre antes de BEGIN.
+Un commit no garantiza entrega por red.
+Duplicado conserva alias original.
+end note
+@enduml

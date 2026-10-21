@@ -1,0 +1,151 @@
+{
+  "info": {
+    "name": "Prex API v1",
+    "description": "Pruebas manuales con environment local. Solo el token del login se guarda automáticamente. Completar user_id y gif_id manualmente. API Key solo en el servidor.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "01 Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "description": "Login público. Guarda access_token en el environment tras una respuesta 200; copiar user.id manualmente a user_id.",
+        "url": "{{base_url}}/api/v1/login",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"{{email}}\",\"password\":\"{{password}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.environment.unset('token');",
+              "if (pm.response.code === 200) {",
+              "  try {",
+              "    const body = pm.response.json();",
+              "    if (typeof body.access_token === 'string' && body.access_token.length > 0) {",
+              "      pm.environment.set('token', body.access_token);",
+              "      pm.environment.set('user_id', body.user.id);",
+              "    }",
+              "  } catch (_) {}",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Buscar GIFs",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "Buscar GIFs por QUERY con LIMIT y OFFSET. Respuesta esperada: 200. Copiar manualmente un data[].id a gif_id, conservando mayúsculas.",
+        "url": "{{base_url}}/api/v1/gifs?QUERY={{query}}&LIMIT=1&OFFSET=0"
+      }
+    },
+    {
+      "name": "03 Consultar GIF",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "Consultar el gif_id completado manualmente en el environment. Respuesta esperada: 200 para un GIF existente.",
+        "url": "{{base_url}}/api/v1/gifs/{{gif_id}}"
+      }
+    },
+    {
+      "name": "04 Crear favorito",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "description": "Crear favorito: exclusivamente 201 es éxito.",
+        "url": "{{base_url}}/api/v1/favorites",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"GIF_ID\":\"{{gif_id}}\",\"ALIAS\":\"{{alias}}\",\"USER_ID\":{{user_id}}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "05 Comprobar duplicado",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "description": "Repetir exactamente el favorito previo: debe responder 409 sin modificar alias.",
+        "url": "{{base_url}}/api/v1/favorites",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"GIF_ID\":\"{{gif_id}}\",\"ALIAS\":\"{{alias}}\",\"USER_ID\":{{user_id}}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

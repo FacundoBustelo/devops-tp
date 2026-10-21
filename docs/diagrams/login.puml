@@ -1,0 +1,51 @@
+@startuml
+!pragma layout smetana
+skinparam shadowing false
+actor Cliente
+participant "AuditHttp / ApiErrors" as HTTP
+participant "Passport / emisión personal" as Auth
+participant "LoginRequest / LoginController" as Controller
+participant "Login" as Use
+participant "Authenticator" as Port
+participant "PassportAuthenticator" as Adapter
+ database MySQL
+participant "RecordInteraction / Redactor\nInteractionRepository / EloquentInteractionRepository" as Audit
+Cliente -> HTTP : POST /api/v1/login (email, password)
+HTTP -> HTTP : contexto UUID / entradas originales
+HTTP -> MySQL : throttle: cache compartida (5/min/IP)
+alt límite excedido
+ HTTP -> HTTP : 429 + Retry-After
+else dentro del límite
+ HTTP -> Controller : LoginRequest valida
+ alt inválido
+  Controller --> HTTP : 422
+ else válido
+  Controller -> Use : Login::execute
+  Use -> Port : Authenticator::authenticate
+  Port -> Adapter : PassportAuthenticator
+  Adapter -> MySQL : buscar User / verificar hash\nusuario ausente: hash ficticio
+  alt credenciales inválidas
+   Adapter --> HTTP : InvalidCredentials -> 401
+  else credenciales válidas
+   Adapter -> Auth : createToken / PT30M / firma RSA
+   Auth -> MySQL : cliente personal users / access token
+   Auth --> Adapter : token firmado
+   Adapter --> Use : LoginResult
+   Use --> Controller : token, actor
+   Controller -> HTTP : assignVerifiedActor / 200 / no-store
+  else fallo infraestructura
+   Adapter --> HTTP : 500 sanitizado
+  end
+ end
+end
+HTTP -> Audit : capturar respuesta final / redactar
+Audit -> MySQL : api_interactions (actor solo tras éxito)
+alt MySQL no disponible
+ Audit -> HTTP : fallback stderr mínimo; sin garantía durable
+end
+HTTP --> Cliente : status, JSON, X-Request-ID
+note right of Auth
+Login sin Bearer; no sesión ni refresh.
+Tokens personales: no Authorization Code + PKCE.
+end note
+@enduml
