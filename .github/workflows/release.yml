@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# Serialize all releases, including different versions. Never cancel a partial push.
+concurrency:
+  group: dockerhub-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require stable SemVer and main ancestry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          bash scripts/ci/validate-tag.sh "$RELEASE_TAG"
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main
+
+  ci:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Test and publish images
+    needs: [validate, ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Prepare temporary paths
+        run: |
+          echo "RELEASE_METADATA=$RUNNER_TEMP/release-images.json" >> "$GITHUB_ENV"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/release-docker-config" >> "$GITHUB_ENV"
+      - name: Require public repositories and unused version
+        run: python3 scripts/ci/check-hub-version.py
+      - name: Build once and test final images
+        run: bash scripts/ci/release-images.sh
+      - name: Authenticate to Docker Hub
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          test -n "$DOCKERHUB_USERNAME"
+          test -n "$DOCKERHUB_TOKEN"
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      - name: Recheck version and push tested images without rebuilding
+        run: |
+          python3 scripts/ci/check-hub-version.py
+          python3 scripts/ci/push-images.py
+      - name: Logout
+        if: ${{ always() }}
+        run: docker logout

@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - run: bash scripts/ci/check.sh quality
+
+  phpunit:
+    name: PHPUnit (${{ matrix.database }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, mysql]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - run: bash scripts/ci/check.sh "$DATABASE"
+        env:
+          DATABASE: ${{ matrix.database }}
+
+  required:
+    name: CI Required
+    if: ${{ always() }}
+    needs: [quality, phpunit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Require every validation to succeed
+        env:
+          QUALITY: ${{ needs.quality.result }}
+          PHPUNIT: ${{ needs.phpunit.result }}
+        run: test "$QUALITY" = success && test "$PHPUNIT" = success
