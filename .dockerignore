@@ -44,3 +44,6 @@
 **/*.sqlite-*
 **/*.sql
 **/*.log
+
+**/__pycache__
+**/*.pyc

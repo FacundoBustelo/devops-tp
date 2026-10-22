@@ -23,3 +23,6 @@
 /.codex/
 /.aws/
 /database/*.sqlite*
+
+__pycache__/
+*.pyc

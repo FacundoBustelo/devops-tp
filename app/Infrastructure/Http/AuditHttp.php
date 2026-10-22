@@ -20,6 +20,7 @@ final readonly class AuditHttp
         if (! HttpInteractionCapture::includes($request)) {
             return $next($request);
         }
+        $request->attributes->set('observability.started_at', hrtime(true));
         $context = new AuditContext((string) Str::uuid(), $this->capture->input($request));
         $request->attributes->set(AuditContext::class, $context);
         $response = $next($request); // Laravel's routing pipeline renders exceptions here.
