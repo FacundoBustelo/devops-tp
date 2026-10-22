@@ -2,7 +2,7 @@
 
 API PrexChallenge: Laravel 13.35.0, Passport 13.9.0, PHP 8.4.26 y MySQL 8.4.11. Ofrece autenticación, búsqueda y consulta de GIFs con GIPHY, favoritos y auditoría en MySQL, con arquitectura hexagonal.
 
-La fase 1 incorpora [Swagger y OpenAPI](docs/openapi/validation.md). La fase 3 incorpora imágenes autocontenidas, construcción multietapa y ejecución sin root. La [evidencia de fase 3](docs/docker/validation.md) registra las verificaciones realizadas y sus límites. CI/CD, publicación de imágenes y observabilidad ampliada siguen pendientes; este cambio no los incorpora.
+La fase 1 incorpora [Swagger y OpenAPI](docs/openapi/validation.md). La fase 3 incorpora imágenes autocontenidas, construcción multietapa y ejecución sin root ([evidencia](docs/docker/validation.md)). La fase 4 incorpora CI y el procedimiento de publicación versionada en Docker Hub ([validación y límites](docs/cicd/validation.md)). La activación en GitHub, el ruleset y la publicación real siguen pendientes; no se incorpora despliegue ni observabilidad ampliada.
 
 Se usa GitHub Flow con ramas cortas y revisión por Pull Request, Conventional Commits y versiones SemVer `vMAJOR.MINOR.PATCH`. `main` debe permanecer estable.
 
@@ -150,7 +150,7 @@ docker compose --env-file /tmp/prex-test.env -p prex-mysql-test -f docker-compos
 docker compose --env-file /tmp/prex-test.env -p prex-mysql-test -f docker-compose.yml -f compose.dev.yaml -f compose.audit-test.yaml down
 ```
 
-La futura CI deberá proporcionar `APP_KEY`, `DB_PASSWORD` y `MYSQL_ROOT_PASSWORD` de prueba para la interpolación de Compose, incluso al ejecutar `build` o `config`. Generar valores efímeros por job y pasarlos como variables de entorno o mediante un archivo temporal con `--env-file`; no usar secretos reales ni versionar esos valores. Usar también un proyecto e imágenes propios del job y mantener las pruebas HTTP externas simuladas. Esta fase no agrega la configuración de CI.
+La CI genera `APP_KEY`, `DB_PASSWORD` y `MYSQL_ROOT_PASSWORD` efímeros por job para la interpolación de Compose, incluso en `build` y `config`. Usa un archivo temporal con `--env-file`, proyectos e imágenes exclusivos y pruebas con HTTP externo simulado. Al terminar elimina sus contenedores, redes, volúmenes y archivo temporal; no utiliza `.env` ni credenciales reales del checkout.
 
 La suite MySQL fuerza `prex_audit_test` y rechaza otras bases antes de migrar. Comprueba integridad, rollback y concurrencia real.
 
@@ -172,6 +172,35 @@ docker compose --env-file /tmp/prex-test.env -p prex-test exec app php scripts/v
 ```
 
 Con Node.js disponible y vendor del lock en el host, `node scripts/verify-docs.mjs http://127.0.0.1:18093` comprueba `/up`, Swagger, JSON y los cuatro assets a través de Nginx, comparando bytes con las fuentes. Revisar además archivos estáticos y el bloqueo de `/.env`, `/composer.json`, `/artisan`, `/vendor/autoload.php` y claves. Registrar resultados reales, sin inferirlos a partir de los comandos.
+
+## CI y publicación de imágenes
+
+`.github/workflows/ci.yml` corre en cada PR hacia `main` y puede reutilizarse mediante `workflow_call`. Calidad ejecuta Pint, las seis pruebas existentes de OpenAPI y las pruebas de protección del publicador. PHPUnit corre en una matriz SQLite/MySQL, usando el target `development`, las configuraciones existentes y `compose.audit-test.yaml`. El job final **CI Required** exige éxito de calidad y de toda la matriz, aunque haya fallos, cancelaciones o jobs omitidos. No hay filtros por archivos que dejen PRs sin check.
+
+Se pueden repetir los jobs sin preparar `.env` (Docker Engine, Buildx, Compose moderno y Python 3; las pruebas de imágenes finales también necesitan Node.js 22 o superior):
+
+```bash
+bash scripts/ci/check.sh quality
+bash scripts/ci/check.sh sqlite
+bash scripts/ci/check.sh mysql
+```
+
+Después de revisar e integrar el código, configurar en GitHub las variables de Actions `DOCKERHUB_NAMESPACE` (usuario u organización, en minúsculas) y `DOCKERHUB_USERNAME` (usuario que autentica), y el secreto `DOCKERHUB_TOKEN` con permiso de escritura sobre ambos repositorios. Crear previamente los repositorios **públicos** `<namespace>/devops-tp-php` y `<namespace>/devops-tp-nginx`. El token solo se entrega al paso de autenticación del job de publicación y se usa un directorio Docker temporal con logout al finalizar. CI y sus PRs no reciben ese secreto.
+
+Ejecutar CI en GitHub y configurar el ruleset de `main` para exigir Pull Request y el check **CI Required**, con la rama actualizada antes de integrar y sin bypass que permita omitirlo. Comprobar con un PR fallido que GitHub bloquea el merge y con su corrección que lo habilita. **Stop-the-Line solo será efectivo después de configurar y comprobar ese requisito.** La presencia del YAML por sí sola no protege `main`.
+
+`.github/workflows/release.yml` se dispara al publicar tags `v*` y rechaza los que no sean `vMAJOR.MINOR.PATCH` estables, sin ceros iniciales, prereleases ni metadatos. Verifica que el commit pertenezca al historial actual de `main` y ejecuta CI antes del job de publicación. La pertenencia admite commits anteriores de `main`; no exige que el tag apunte a su punta. Crear y publicar un tag constituye la operación de release y requiere la autorización posterior del responsable; no se ejecutó durante esta implementación.
+
+El job verifica que ambos repositorios sean públicos y que ninguna de las dos versiones exista. Construye una sola vez cada target `runtime` y `nginx` para `linux/amd64` con `--load`, asignando versión sin `v` y SHA completo en etiquetas OCI. Arranca esas imágenes con Compose `--no-build --pull never`, prueba inicialización, salud, acceso SQL sin root, directorios escribibles, Swagger y assets. Luego autentica, vuelve a comprobar disponibilidad y publica **esas mismas imágenes locales** con `docker push`, sin reconstrucción ni etiqueta `latest`:
+
+```text
+<namespace>/devops-tp-php:MAJOR.MINOR.PATCH
+<namespace>/devops-tp-nginx:MAJOR.MINOR.PATCH
+```
+
+La release registra versión, SHA completo, plataforma, identificadores de imágenes probadas y digests publicados en logs y en el resumen de Actions. El archivo temporal `release-images.json` enlaza las imágenes probadas con el publicador; este rechaza cambios de identificador. Las releases se serializan y no se cancelan automáticamente. Docker Hub no ofrece una transacción conjunta para los dos pushes: si uno falla después del otro, la release queda **fallida y parcial**. No reejecutar esa versión ni borrar tags para reutilizarla; investigar y preparar una versión nueva con autorización. Los checks de existencia rechazan tags ya publicados, pero no son una escritura atómica: reservar estos repositorios a este flujo y habilitar [tags inmutables en Docker Hub](https://docs.docker.com/docker-hub/repos/manage/hub-images/immutable-tags/) para impedir carreras con escritores externos.
+
+La [evidencia de fase 4](docs/cicd/validation.md) distingue las comprobaciones locales de las pendientes en GitHub y Docker Hub, e incluye un comando para probar las imágenes finales sin publicarlas. No hay despliegue automático.
 
 ## Diagramas y diagnóstico
 
