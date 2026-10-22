@@ -20,9 +20,11 @@ final class InitializeApplication extends Command
         $stage = 'APP_KEY';
 
         try {
-            $this->info('[init] APP_KEY: conservar o generar si está vacía');
+            $this->info('[init] APP_KEY: exigir configuración externa');
             if (blank(config('app.key'))) {
-                $this->executeStep('key:generate', ['--force' => true]);
+                $this->error('[init] Falta APP_KEY. Preparar el entorno explícitamente; init no genera ni reemplaza secretos.');
+
+                return self::FAILURE;
             }
 
             $stage = 'migraciones';

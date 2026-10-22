@@ -28,7 +28,7 @@ final class InitializeApplicationTest extends TestCase
             unlink($path);
         }
         rmdir($this->keys);
-        Passport::loadKeysFrom(storage_path());
+        Passport::loadKeysFrom(storage_path('passport'));
         parent::tearDown();
     }
 
@@ -59,6 +59,19 @@ final class InitializeApplicationTest extends TestCase
         $this->assertDatabaseCount('users', 1);
         $this->assertSame($password, $user->fresh()->password);
         $this->assertTrue($user->fresh()->trashed());
+    }
+
+    public function test_missing_application_key_fails_without_generating_secrets(): void
+    {
+        config(['app.key' => '']);
+
+        $this->artisan('app:initialize')
+            ->expectsOutput('[init] Falta APP_KEY. Preparar el entorno explícitamente; init no genera ni reemplaza secretos.')
+            ->assertFailed();
+
+        $this->assertSame('', config('app.key'));
+        $this->assertSame([], glob($this->keys.'/*'));
+        $this->assertDatabaseCount('oauth_clients', 0);
     }
 
     public function test_incomplete_keys_fail_without_replacing_the_remaining_key_or_creating_client(): void
