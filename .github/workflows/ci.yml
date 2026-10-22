@@ -35,10 +35,20 @@ jobs:
         env:
           DATABASE: ${{ matrix.database }}
 
+  observability:
+    name: Observability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - run: bash scripts/ci/check-observability.sh
+
   required:
     name: CI Required
     if: ${{ always() }}
-    needs: [quality, phpunit]
+    needs: [quality, phpunit, observability]
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
@@ -46,4 +56,5 @@ jobs:
         env:
           QUALITY: ${{ needs.quality.result }}
           PHPUNIT: ${{ needs.phpunit.result }}
-        run: test "$QUALITY" = success && test "$PHPUNIT" = success
+          OBSERVABILITY: ${{ needs.observability.result }}
+        run: test "$QUALITY" = success && test "$PHPUNIT" = success && test "$OBSERVABILITY" = success

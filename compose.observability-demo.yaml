@@ -1,0 +1,5 @@
+# Only app changes. MySQL, init and Passport retain the original environment and volumes.
+services:
+  app:
+    environment:
+      GIPHY_API_KEY: ""

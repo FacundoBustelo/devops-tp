@@ -1,0 +1,105 @@
+rule_files:
+  - ../alerts.yml
+evaluation_interval: 15s
+tests:
+  - name: errors_pending_firing_and_recovery
+    interval: 15s
+    input_series:
+      - series: 'up{job="laravel",instance="nginx:9091"}'
+        values: '1x30'
+      - series: 'devops_http_requests_total{job="laravel",method="GET",route="api.v1.gifs.search",status="503"}'
+        values: '0+5x8 40x22'
+      - series: 'devops_http_requests_total{job="laravel",method="GET",route="api.v1.gifs.search",status="200"}'
+        values: '0x8 5+5x22'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: ApiHigh5xxRate
+        exp_alerts: []
+      - eval_time: 60s
+        alertname: ApiHigh5xxRate
+        exp_alerts:
+          - exp_labels: {severity: warning, job: laravel}
+            exp_annotations: {summary: 'API supera 20% de 5xx con volumen suficiente'}
+      - eval_time: 5m
+        alertname: ApiHigh5xxRate
+        exp_alerts: []
+    promql_expr_test:
+      - expr: 'ALERTS{alertname="ApiHigh5xxRate",alertstate="pending"}'
+        eval_time: 30s
+        exp_samples:
+          - labels: 'ALERTS{alertname="ApiHigh5xxRate",alertstate="pending",severity="warning",job="laravel"}'
+            value: 1
+  - name: low_volume_never_fires
+    interval: 15s
+    input_series:
+      - series: 'up{job="laravel",instance="nginx:9091"}'
+        values: '1x30'
+      - series: 'devops_http_requests_total{job="laravel",status="503"}'
+        values: '0+0.1x30'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ApiHigh5xxRate
+        exp_alerts: []
+  - name: reset_is_handled_and_target_must_be_available
+    interval: 15s
+    input_series:
+      - series: 'up{job="laravel",instance="nginx:9091"}'
+        values: '1x12 0x8'
+      - series: 'devops_http_requests_total{job="laravel",status="503"}'
+        values: '100+5x4 0+5x20'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ApiHigh5xxRate
+        exp_alerts:
+          - exp_labels: {severity: warning, job: laravel}
+            exp_annotations: {summary: 'API supera 20% de 5xx con volumen suficiente'}
+      - eval_time: 4m
+        alertname: ApiHigh5xxRate
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ApiMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical, job: laravel, instance: 'nginx:9091'}
+            exp_annotations: {summary: 'No se pueden recolectar métricas de Laravel'}
+  - name: target_absent
+    interval: 15s
+    input_series: []
+    alert_rule_test:
+      - eval_time: 15s
+        alertname: ApiMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 30s
+        alertname: ApiMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical, job: laravel, instance: 'nginx:9091'}
+            exp_annotations: {summary: 'No se pueden recolectar métricas de Laravel'}
+  - name: no_traffic_and_missing_request_samples_are_not_errors
+    interval: 15s
+    input_series:
+      - series: 'up{job="laravel",instance="nginx:9091"}'
+        values: '1x30'
+      - series: 'devops_http_requests_total{job="laravel",status="503"}'
+        values: '0x30'
+      - series: 'devops_http_requests_total{job="laravel",status="200"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ApiHigh5xxRate
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ApiMetricsUnavailable
+        exp_alerts: []
+  - name: target_recovers
+    interval: 15s
+    input_series:
+      - series: 'up{job="laravel",instance="nginx:9091"}'
+        values: '0x4 1x10'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: ApiMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical, job: laravel, instance: 'nginx:9091'}
+            exp_annotations: {summary: 'No se pueden recolectar métricas de Laravel'}
+      - eval_time: 90s
+        alertname: ApiMetricsUnavailable
+        exp_alerts: []

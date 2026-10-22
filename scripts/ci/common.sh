@@ -3,15 +3,19 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 task_dir=$(mktemp -d)
-export COMPOSE_PROJECT_NAME="devops-ci-$(basename "$task_dir" | tr '[:upper:].' '[:lower:]-')"
+export COMPOSE_PROJECT_NAME="${CI_PROJECT_PREFIX:-devops-ci}-$(basename "$task_dir" | tr '[:upper:].' '[:lower:]-')"
 export IMAGE_REPOSITORY="${CI_IMAGE_REPOSITORY:-$COMPOSE_PROJECT_NAME}"
 export APP_VERSION="${CI_APP_VERSION:-0.0.0-ci}"
 export VCS_REF
 VCS_REF=$(git rev-parse HEAD)
 python3 - "$task_dir/compose.env" <<'PY'
-import base64, secrets, sys
+import base64, os, secrets, sys
 from pathlib import Path
 Path(sys.argv[1]).write_text('\n'.join([
+    'COMPOSE_PROJECT_NAME=' + os.environ['COMPOSE_PROJECT_NAME'],
+    'IMAGE_REPOSITORY=' + os.environ['IMAGE_REPOSITORY'],
+    'APP_VERSION=' + os.environ['APP_VERSION'],
+    'GRAFANA_ADMIN_PASSWORD=' + secrets.token_hex(32),
     'APP_KEY=base64:' + base64.b64encode(secrets.token_bytes(32)).decode(),
     'DB_PASSWORD=' + secrets.token_hex(24),
     'MYSQL_ROOT_PASSWORD=' + secrets.token_hex(24),
@@ -22,7 +26,7 @@ set -a
 source "$task_dir/compose.env"
 set +a
 export APP_ENV=testing APP_DEBUG=false APP_NAME=CI APP_URL=http://127.0.0.1
-export DB_DATABASE=prex_ci DB_USERNAME=prex_ci HTTP_PORT=0 DB_FORWARD_PORT=0
+export DB_DATABASE=prex_ci DB_USERNAME=prex_ci HTTP_PORT=0 DB_FORWARD_PORT=0 GRAFANA_PORT=0
 export GIPHY_API_KEY= GIPHY_CONNECT_TIMEOUT=2 GIPHY_TIMEOUT=5 TRUSTED_PROXIES=
 compose=(docker compose --env-file "$task_dir/compose.env" -f docker-compose.yml)
 cleanup() {

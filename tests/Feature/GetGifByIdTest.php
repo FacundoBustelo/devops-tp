@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Application\Audit\Redactor;
 use App\Infrastructure\Audit\ApiInteraction;
+use App\Infrastructure\Observability\SafeEvents;
 use App\Models\User;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\NetworkTimeoutException;
@@ -11,7 +12,6 @@ use GuzzleHttp\Psr7\Request;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Laravel\Passport\Passport;
@@ -83,7 +83,7 @@ final class GetGifByIdTest extends TestCase
     {
         $user = User::factory()->create();
         Passport::actingAs($user);
-        Log::spy();
+        $events = $this->spy(SafeEvents::class);
         $cases = [
             [404, ['data' => [], 'meta' => ['status' => 404]], 404],
             [404, ['data' => null, 'meta' => ['status' => 404]], 502],
@@ -112,6 +112,7 @@ final class GetGifByIdTest extends TestCase
         $this->audited($r, $user->id, 'AbC123');
         Http::assertNothingSent();
         self::assertSame(count($cases) + 3, ApiInteraction::count());
-        Log::shouldNotHaveReceived('error');
+        $events->shouldNotHaveReceived('exception');
+        $events->shouldHaveReceived('emit')->with('http_request_completed', \Mockery::type('array'), \Mockery::type('string'));
     }
 }
