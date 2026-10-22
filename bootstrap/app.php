@@ -12,6 +12,7 @@ use App\Infrastructure\Console\InitializeApplication;
 use App\Infrastructure\Http\ApiErrors;
 use App\Infrastructure\Http\AuditHttp;
 use App\Infrastructure\Http\ExplicitTrustProxies;
+use App\Infrastructure\Observability\SafeEvents;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: fn () => require __DIR__.'/../routes/observability.php',
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(AuditHttp::class);
@@ -32,6 +34,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->replace(TrustProxies::class, ExplicitTrustProxies::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->report(function (Throwable $exception): void {
+            app(SafeEvents::class)->exception($exception, app('request'));
+        })->stop();
         $exceptions->shouldRenderJsonWhen(fn ($request, $exception) => HttpInteractionCapture::includes($request) || $request->expectsJson());
         $exceptions->render(fn (InvalidCredentials $exception) => response()->json(['message' => 'Credenciales inválidas.'], 401));
         $exceptions->dontReport([FavoriteAlreadyExists::class, IncorrectFavoriteOwner::class, CatalogUnavailable::class, CatalogTimeout::class, InvalidCatalogResponse::class, GifNotFound::class]);

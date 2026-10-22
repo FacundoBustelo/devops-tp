@@ -1,0 +1,17 @@
+PASS base Compose: API, logs, health, Swagger; no metrics directory or monitoring services
+  SUCCESS: 1 rule files found
+ SUCCESS: /etc/prometheus/prometheus.yml is valid prometheus config file syntax
+  SUCCESS: 2 rules found
+  SUCCESS: 2 rules found
+  SUCCESS
+PASS public security: 78 raw requests
+PASS Grafana authentication, provisioning and real datasource queries: [{"panel": "Solicitudes por segundo", "series": 1, "values": ["0"]}, {"panel": "Tráfico por ruta y estado", "series": 30, "values": ["0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"]}, {"panel": "Errores 4xx", "series": 1, "values": ["0"]}, {"panel": "Errores 5xx", "series": 1, "values": ["0"]}, {"panel": "Porcentaje 5xx", "series": 0, "values": []}, {"panel": "Latencia media", "series": 0, "values": []}, {"panel": "Latencia p95", "series": 0, "values": []}, {"panel": "Target Laravel", "series": 1, "values": ["1"]}, {"panel": "Alertas activas", "series": 0, "values": []}]
+PASS actual idle state: up=1, RPS=0, ratio/latencies absent
+PASS 200 requests, concurrency 8, 4 FPM workers, 6 coherent concurrent scrapes
+PASS restart preserves SQLite counters
+PASS recreation resets metrics and preserves audit / Passport
+PASS 200 requests, concurrency 8, 4 FPM workers, 6 coherent concurrent scrapes
+PASS header / audit / JSON log correlation: f2d3c01f-af31-499e-a4de-49159b2b201d
+PASS real SQLite lock: bounded wait, unchanged 401, coherent unchanged scrape
+PASS inaccessible metrics storage preserves 401; scrape returns 503
+PASS Grafana authentication, provisioning and real datasource queries: [{"panel": "Solicitudes por segundo", "series": 1, "values": ["2.125580185185185"]}, {"panel": "Tráfico por ruta y estado", "series": 30, "values": ["0", "2.125580185185185", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"]}, {"panel": "Errores 4xx", "series": 1, "values": ["2.125580185185185"]}, {"panel": "Errores 5xx", "series": 1, "values": ["0"]}, {"panel": "Porcentaje 5xx", "series": 1, "values": ["0"]}, {"panel": "Latencia media", "series": 1, "values": ["0.012833198142857138"]}, {"panel": "Latencia p95", "series": 1, "values": ["0.024222222222222225"]}, {"panel": "Target Laravel", "series": 1, "values": ["1"]}, {"panel": "Alertas activas", "series": 0, "values": []}]

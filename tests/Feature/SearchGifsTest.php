@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Infrastructure\Audit\ApiInteraction;
+use App\Infrastructure\Observability\SafeEvents;
 use App\Models\User;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\NetworkTimeoutException;
@@ -10,7 +11,6 @@ use GuzzleHttp\Psr7\Request;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Laravel\Passport\Passport;
@@ -97,7 +97,7 @@ final class SearchGifsTest extends TestCase
     {
         $user = User::factory()->create();
         Passport::actingAs($user);
-        Log::spy();
+        $events = $this->spy(SafeEvents::class);
         foreach ([302 => 502, 404 => 502, 401 => 503, 403 => 503, 429 => 503, 500 => 503, 200 => 502] as $status => $expected) {
             $this->fake(['*' => Http::response('technical api_key=external-secret', $status)]);
             $r = $this->search(['QUERY' => 'cats'])->assertStatus($expected)->assertExactJson(['message' => 'Error del servidor.']);
@@ -115,6 +115,7 @@ final class SearchGifsTest extends TestCase
         $this->audited($r, $user->id);
         Http::assertNothingSent();
         self::assertSame(10, ApiInteraction::count());
-        Log::shouldNotHaveReceived('error');
+        $events->shouldNotHaveReceived('exception');
+        $events->shouldHaveReceived('emit')->with('http_request_completed', \Mockery::type('array'), \Mockery::type('string'));
     }
 }

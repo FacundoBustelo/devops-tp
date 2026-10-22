@@ -52,6 +52,13 @@ return [
     */
 
     'channels' => [
+        'http' => [
+            'driver' => 'monolog',
+            'handler' => StreamHandler::class,
+            'handler_with' => ['stream' => 'php://stderr'],
+            'formatter' => JsonFormatter::class,
+            'level' => 'info',
+        ],
         'audit' => [
             'driver' => 'monolog',
             'handler' => StreamHandler::class,
@@ -117,7 +124,7 @@ return [
             'handler_with' => [
                 'stream' => 'php://stderr',
             ],
-            'formatter' => env('LOG_STDERR_FORMATTER'),
+            'formatter' => JsonFormatter::class,
             'processors' => [PsrLogMessageProcessor::class],
         ],
 

@@ -97,3 +97,10 @@ Después de aprobar e integrar el código:
 5. Conservar el resumen de Actions y los logs: contienen versión, revisión completa, IDs probados y digests publicados. `release-images.json` es temporal, se imprime en logs y no se sube como artefacto independiente. Una publicación parcial es fallida; no reintentar ni reutilizar esa versión, aunque falte uno de los tags.
 
 No se probaron runners GitHub, credenciales, reglas de merge, inmutabilidad, rate limits ni una publicación real. La serialización evita solapar estos workflows, pero la publicación de los dos repositorios sigue sin ser transaccional. GitHub puede reemplazar runs pendientes de un mismo grupo de concurrencia; cada release requiere verificar su resultado antes de crear la siguiente. No hay rollback automático ni despliegue.
+
+
+## Actualización posterior · 22 de octubre de 2026
+
+La revisión de fase 5 parte de `origin/main` en `8271f9b14c3f217dff0b25e2ef460b7c22486842`, que también corresponde a `v1.0.0`. El [workflow de publicación v1.0.0](https://github.com/FacundoBustelo/devops-tp/actions/runs/39848825145) fue exitoso y publicó las imágenes `facubus/devops-tp-php:1.0.0` y `facubus/devops-tp-nginx:1.0.0`. Esta actualización conserva las comprobaciones y pendientes históricos de las secciones anteriores; ya no describe la publicación real como pendiente. No se ha modificado ninguna de esas etiquetas durante fase 5.
+
+Fase 5 añade `observability` a las dependencias y al gate de `CI Required`. Se mantiene la matriz SQLite/MySQL, Pint/OpenAPI, las protecciones de release y la invocación de CI antes de publicar. Resultados y limitaciones nuevas en [observabilidad](../observability/validation.md).

@@ -32,6 +32,7 @@ COPY resources resources
 COPY routes routes
 COPY artisan ./
 COPY docs/openapi/openapi.json docs/openapi/openapi.json
+COPY scripts/observability/init-metrics.php scripts/observability/init-metrics.php
 COPY scripts/docker-init.sh scripts/verify-runtime.php scripts/verify-login.php scripts/
 RUN mkdir -p bootstrap/cache storage/passport storage/framework/cache/data \
         storage/framework/sessions storage/framework/views storage/logs storage/app/private storage/app/public \

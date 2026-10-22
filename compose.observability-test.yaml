@@ -1,0 +1,6 @@
+# Isolated disposable project only. This does not install a test endpoint in runtime.
+services:
+  app:
+    volumes:
+      - ./tests/Support/observability/fpm.conf:/usr/local/etc/php-fpm.d/zzz-observability-test.conf:ro
+      - ./tests/Support/observability/runtime.php:/tmp/observability-runtime.php:ro

@@ -1,0 +1,230 @@
+{
+  "started_at": "2026-10-22T21:22:44.106923+00:00",
+  "baseline_search": 200,
+  "states": [
+    {
+      "state": "inactive",
+      "elapsed_seconds": 0.2
+    },
+    {
+      "state": "pending",
+      "elapsed_seconds": 20.3
+    },
+    {
+      "state": "firing",
+      "elapsed_seconds": 50.3
+    }
+  ],
+  "failed_requests": 51,
+  "counter_503": [
+    {
+      "metric": {},
+      "value": [
+        1792704243.533,
+        "45"
+      ]
+    }
+  ],
+  "up": [
+    {
+      "metric": {
+        "__name__": "up",
+        "instance": "nginx:9091",
+        "job": "laravel"
+      },
+      "value": [
+        1792704243.68,
+        "1"
+      ]
+    }
+  ],
+  "dashboard_firing": [
+    {
+      "panel": "Solicitudes por segundo",
+      "series": 1,
+      "values": [
+        "0.41799285714285717"
+      ]
+    },
+    {
+      "panel": "Tráfico por ruta y estado",
+      "series": 30,
+      "values": [
+        "0.009523809523809523",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0.39958928571428576",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0.008879761904761906",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "panel": "Errores 4xx",
+      "series": 1,
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "panel": "Errores 5xx",
+      "series": 1,
+      "values": [
+        "0.39958928571428576"
+      ]
+    },
+    {
+      "panel": "Porcentaje 5xx",
+      "series": 1,
+      "values": [
+        "95.59715647909226"
+      ]
+    },
+    {
+      "panel": "Latencia media",
+      "series": 1,
+      "values": [
+        "0.031774037982057544"
+      ]
+    },
+    {
+      "panel": "Latencia p95",
+      "series": 1,
+      "values": [
+        "0.04818269502912216"
+      ]
+    },
+    {
+      "panel": "Target Laravel",
+      "series": 1,
+      "values": [
+        "1"
+      ]
+    },
+    {
+      "panel": "Alertas activas",
+      "series": 1,
+      "values": [
+        "1"
+      ]
+    }
+  ],
+  "recovered_search": 200,
+  "active_high5xx_alerts_after_recovery": [],
+  "dashboard_recovery": [
+    {
+      "panel": "Solicitudes por segundo",
+      "series": 1,
+      "values": [
+        "0.10809714285714284"
+      ]
+    },
+    {
+      "panel": "Tráfico por ruta y estado",
+      "series": 30,
+      "values": [
+        "0.10809714285714284",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "panel": "Errores 4xx",
+      "series": 1,
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "panel": "Errores 5xx",
+      "series": 1,
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "panel": "Porcentaje 5xx",
+      "series": 1,
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "panel": "Latencia media",
+      "series": 1,
+      "values": [
+        "0.12854814733333333"
+      ]
+    },
+    {
+      "panel": "Latencia p95",
+      "series": 1,
+      "values": [
+        "0.3499999999999999"
+      ]
+    },
+    {
+      "panel": "Target Laravel",
+      "series": 1,
+      "values": [
+        "1"
+      ]
+    },
+    {
+      "panel": "Alertas activas",
+      "series": 0,
+      "values": []
+    }
+  ],
+  "finished_at": "2026-10-22T21:26:21.064606+00:00"
+}
