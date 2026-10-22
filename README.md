@@ -8,11 +8,11 @@ La API ofrece autenticación, búsqueda y consulta de GIFs mediante GIPHY, y gua
 
 ## Estado y alcance del TP
 
-El proyecto está en preparación inicial. La base reutilizada incluye la API, pruebas automatizadas, un entorno local Docker, diagramas y una colección de Postman. Los resultados de las verificaciones deberán registrarse en los Pull Requests correspondientes.
+La fase 1 incorpora Swagger UI y OpenAPI a la API reutilizada, sus pruebas automatizadas, el entorno local Docker, los diagramas y la colección de Postman. La [evidencia de validación de fase 1](docs/openapi/validation.md) registra los resultados y el recorrido pendiente contra GIPHY real. Las fases siguientes conservan su alcance pendiente.
 
 | Fase | Base existente | Trabajo pendiente para el TP |
 |---|---|---|
-| 1. Desarrollo base y documentación | API REST y suites de pruebas unitarias, funcionales e integración. | Ejecutar y documentar las pruebas; incorporar una interfaz interactiva Swagger/OpenAPI accesible. La colección de Postman no cubre este requisito obligatorio. |
+| 1. Desarrollo base y documentación | API REST, pruebas unitarias, funcionales e integración; Swagger UI y OpenAPI 3.0.0 implementados y verificados. | Completar el recorrido exitoso contra GIPHY real con una clave válida. Ver [evidencia](docs/openapi/validation.md). |
 | 2. Gestión de cambios y versionado | Aplicación preparada para incorporarse a un historial nuevo. | Registrar la importación mediante PR, aplicar GitHub Flow y Conventional Commits, configurar la protección de `main` y establecer versiones SemVer. |
 | 3. Empaquetado y entorno local | Dockerfile y Docker Compose para desarrollo local. | Adecuar la construcción multietapa para separar dependencias del runtime, optimizar capas y tamaño, ejecutar el contenedor como usuario non-root y preparar una imagen ejecutable sin montar el código del checkout. |
 | 4. Automatización CI/CD | PHPUnit y Pint disponibles como dependencias de desarrollo. | Implementar GitHub Actions para PR con linter y pruebas, bloquear la integración ante fallos y automatizar releases y publicación de imágenes en Docker Hub con el tag SemVer correspondiente. |
@@ -205,6 +205,36 @@ Los últimos tres requieren Bearer. Enviar Accept y, para POST, Content-Type `ap
 
 Favoritos consulta GIPHY antes de la transacción. Dentro de ella inserta favorito, serializa respuesta y persiste auditoría sanitizada; tras commit marca el contexto confirmado. Fallos revierten ambas escrituras y permiten auditar el error final fuera de la transacción. Toda interacción `/api` se captura con actor verificado, servicio, request/response sanitizados, status, IP, fecha y UUID del servidor. No se registran headers/cookies; cuerpos opacos o streaming se omiten.
 
+## Swagger y OpenAPI
+
+Con Compose iniciado, abrir [Swagger UI](http://127.0.0.1:8080/docs). El documento se sirve en [`/docs/openapi.json`](http://127.0.0.1:8080/docs/openapi.json). Ajustar el puerto a `HTTP_PORT` de `.env`. Documentación y assets se sirven desde la aplicación y el paquete instalado, en el mismo origen; no requieren una clave GIPHY para visualizarse.
+
+1. Expandir **POST /api/v1/login**, pulsar **Try it out**, completar email y password del usuario local y pulsar **Execute**. Las credenciales de instalación figuran en el paso 4; no están incluidas como ejemplos OpenAPI.
+2. Con la respuesta **200**, copiar `access_token` y anotar `user.id`.
+3. Pulsar **Authorize**, pegar solo el token, sin `Bearer`, y confirmar **Authorize**. Swagger agrega el header `Authorization: Bearer` a las tres operaciones protegidas. Login sigue siendo público.
+4. Ejecutar la búsqueda con `QUERY`, copiar un ID para consultar el GIF y crear el favorito con `GIF_ID`, `ALIAS` y `USER_ID` igual al `user.id` del login. Estas operaciones necesitan una clave GIPHY válida en el servidor. El mismo usuario/GIF vuelve a producir **409**.
+
+El token vence a los 30 minutos y la autorización se pierde al recargar o cerrar la página. Volver a ejecutar login y Authorize cuando sea necesario. No se configuran flujos OAuth ni se persiste el token en el navegador. El validador remoto de Swagger está desactivado.
+
+La fuente editable son los atributos PHP de los cuatro controladores en `app/Infrastructure/Http/` y los componentes en [`app/Infrastructure/OpenApi/`](app/Infrastructure/OpenApi/). El archivo [`docs/openapi/openapi.json`](docs/openapi/openapi.json) se versiona y se sirve sin regenerarlo por petición. Después de cambiar atributos, regenerar explícitamente y revisar el diff:
+
+```bash
+docker compose run --rm --no-deps app composer docs:generate
+git diff -- docs/openapi/openapi.json
+docker compose run --rm --no-deps -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: app vendor/bin/phpunit --filter OpenApiDocumentationTest
+```
+
+Las pruebas generan en un directorio temporal, comprueban la validación de swagger-php sin advertencias, comparan el resultado con el archivo versionado, resuelven las referencias internas y contrastan las cuatro operaciones con las rutas registradas, normalizando HEAD. También comprueban login público, Bearer en las otras tres operaciones y publicación de UI, JSON y assets.
+
+Como validación adicional, con Node.js 22 y npm disponibles en el host, ejecutar Redocly CLI con versión fijada y el verificador HTTP por Nginx:
+
+```bash
+npm exec --yes --package=@redocly/cli@1.34.5 -- redocly lint docs/openapi/openapi.json
+node scripts/verify-docs.mjs http://127.0.0.1:8080
+```
+
+El último comando acepta la URL base para usar otro puerto. Comprueba `/up`, `/docs`, la especificación y todos los assets referenciados, sus tipos de contenido y su coincidencia con el documento versionado y el paquete instalado. No envía credenciales ni consulta GIPHY.
+
 ## Pruebas
 
 Desde una instalación con vendor, Unit no arranca Laravel; Feature usa SQLite en memoria. Los tests bloquean HTTP externo y usan claves efímeras.
@@ -252,4 +282,4 @@ Usar `docker compose logs --tail=100 init app nginx mysql`, `php artisan migrate
 
 Decisiones heredadas de PrexChallenge: los IDs de GIPHY se manejan como texto y el login utiliza tokens personales Passport, sin Authorization Code + PKCE. Estas decisiones describen la API reutilizada y no son excepciones a la consigna del TP de DevOps. Para un despliegue real queda pendiente revisar las condiciones de uso de GIPHY aplicables a la integración backend. Una respuesta observada no demuestra cuota disponible. El fallback de auditoría en stderr no garantiza persistencia/recuperación durante una caída MySQL; commit tampoco garantiza entrega de respuesta al cliente. La sanitización no reconoce secretos arbitrarios sin formato identificable.
 
-OpenAPI, CI/CD y observabilidad forman parte del trabajo pendiente del TP descrito al inicio de este documento. La ejecución automatizada de Postman, la recuperación durable de auditoría y los reintentos no están implementados; se evaluarán únicamente si resultan necesarios para el alcance del proyecto.
+CI/CD y observabilidad forman parte del trabajo pendiente del TP descrito al inicio de este documento. OpenAPI y Swagger UI están implementados; sus verificaciones y límites se registran en la [evidencia de fase 1](docs/openapi/validation.md). La ejecución automatizada de Postman, la recuperación durable de auditoría y los reintentos no están implementados; se evaluarán únicamente si resultan necesarios para el alcance del proyecto.
