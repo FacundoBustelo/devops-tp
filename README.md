@@ -8,11 +8,11 @@ La API ofrece autenticación, búsqueda y consulta de GIFs mediante GIPHY, y gua
 
 ## Estado y alcance del TP
 
-La fase 1 incorpora Swagger UI y OpenAPI a la API reutilizada, sus pruebas automatizadas, el entorno local Docker, los diagramas y la colección de Postman. La [evidencia de validación de fase 1](docs/openapi/validation.md) registra los resultados y el recorrido pendiente contra GIPHY real. Las fases siguientes conservan su alcance pendiente.
+La fase 1 incorpora Swagger UI y OpenAPI a la API reutilizada, sus pruebas automatizadas, el entorno local Docker, los diagramas y la colección de Postman. La [evidencia de validación de fase 1](docs/openapi/validation.md) registra las verificaciones automatizadas y el recorrido exitoso con GIPHY real realizado e informado por el responsable del proyecto desde Swagger UI. La fase 1 queda validada para revisión; las fases siguientes conservan su alcance pendiente.
 
 | Fase | Base existente | Trabajo pendiente para el TP |
 |---|---|---|
-| 1. Desarrollo base y documentación | API REST, pruebas unitarias, funcionales e integración; Swagger UI y OpenAPI 3.0.0 implementados y verificados. | Completar el recorrido exitoso contra GIPHY real con una clave válida. Ver [evidencia](docs/openapi/validation.md). |
+| 1. Desarrollo base y documentación | API REST, pruebas unitarias, funcionales e integración; Swagger UI y OpenAPI 3.0.0 implementados y verificados. Recorrido exitoso con GIPHY real informado por el responsable del proyecto. | Sin verificaciones pendientes de la fase. Revisión e integración del PR a `main` pendientes. Ver [evidencia](docs/openapi/validation.md). |
 | 2. Gestión de cambios y versionado | Aplicación preparada para incorporarse a un historial nuevo. | Registrar la importación mediante PR, aplicar GitHub Flow y Conventional Commits, configurar la protección de `main` y establecer versiones SemVer. |
 | 3. Empaquetado y entorno local | Dockerfile y Docker Compose para desarrollo local. | Adecuar la construcción multietapa para separar dependencias del runtime, optimizar capas y tamaño, ejecutar el contenedor como usuario non-root y preparar una imagen ejecutable sin montar el código del checkout. |
 | 4. Automatización CI/CD | PHPUnit y Pint disponibles como dependencias de desarrollo. | Implementar GitHub Actions para PR con linter y pruebas, bloquear la integración ante fallos y automatizar releases y publicación de imágenes en Docker Hub con el tag SemVer correspondiente. |

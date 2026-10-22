@@ -1,6 +1,6 @@
 # Validación de fase 1: OpenAPI y Swagger UI
 
-Verificación completada el 22 de octubre de 2026 en `feat/openapi-documentation`, basada en `9d89ca4`. Entrega local, sin push ni Pull Request. Las cuatro operaciones, sus reglas y sus respuestas conservan el código existente; los controladores solo agregan imports y atributos de documentación.
+Verificaciones automatizadas y cierre documental registrados el 22 de octubre de 2026 en `feat/openapi-documentation`, basada en `9d89ca4`. La fase 1 queda validada para revisión mediante Pull Request a `main`; su integración requiere una revisión posterior. Las cuatro operaciones, sus reglas y sus respuestas conservan el código existente; los controladores solo agregan imports y atributos de documentación.
 
 ## Implementación y dependencias
 
@@ -63,8 +63,9 @@ Archivos de la entrega:
 | Pint | **116 archivos**, aprobado. |
 | Compose | Configuración válida; `up -d --build --wait` aprobado. `init` terminó con código 0; `app` disponible, MySQL y Nginx saludables. |
 | Publicación por Nginx | `/up`, `/docs`, `/docs/openapi.json` y los cuatro assets referenciados respondieron **200** con tipos HTML, JSON, CSS, PNG y JavaScript correctos. JSON idéntico al versionado y assets idénticos al paquete. |
-| Chrome | Cuatro operaciones renderizadas, login interactivo **200**, diálogo Authorize operativo y header Bearer enviado por las tres operaciones protegidas. Sin clave GIPHY, las tres respondieron **503** con el error previsto. |
+| Chrome, verificación inicial del agente | Cuatro operaciones renderizadas, login interactivo **200**, diálogo Authorize operativo y header Bearer enviado por las tres operaciones protegidas. En esa ejecución todavía no había clave GIPHY y las tres respondieron **503** con el error previsto. |
 | Navegador y autorización | Tras recargar, la autorización queda vacía. `persistAuthorization=false`, `validatorUrl=null`, sin errores JavaScript ni solicitudes a otros orígenes durante el recorrido. |
+| GIPHY real, prueba manual del responsable del proyecto | Después de configurar una clave válida, el responsable del proyecto informó que verificó exitosamente búsqueda, consulta y creación de favoritos desde Swagger UI. El agente no reejecutó ese recorrido; ver el registro de cierre. |
 
 La publicación HTTP fue comprobada tanto por `OpenApiDocumentationTest` dentro de Laravel como por `scripts/verify-docs.mjs` a través de Nginx. Otra prueba solicita un documento inexistente en una ubicación temporal y verifica que responde 404 sin generarlo.
 
@@ -115,8 +116,24 @@ El recorrido del navegador se automatizó con Playwright `1.56.1`, instalado tem
 
 No quedan verificaciones locales fallidas. Las contraseñas MySQL existentes se conservaron; no fue necesario reemplazarlas ni imprimirlas. Vendor, `.env`, claves Passport, cachés y herramientas temporales no se versionan.
 
-## Verificación bloqueada y límites
+## Prueba manual con GIPHY real y cierre de fase 1
 
-El recorrido **exitoso** contra GIPHY real queda bloqueado por `GIPHY_API_KEY` vacía. La inicialización avisó de su ausencia y el navegador comprobó los 503 esperados; eso no acredita respuestas exitosas del proveedor. Las suites automatizadas usan simulaciones y mantienen bloqueado el HTTP externo. Para completar esa evidencia hace falta configurar una clave válida y repetir la búsqueda, consulta y creación de favorito desde Swagger según el README.
+El 22 de octubre de 2026, el responsable del proyecto informó que configuró una API key válida de GIPHY y comprobó el funcionamiento correcto desde Swagger UI, con resultado exitoso en estas operaciones:
 
-Esta fase no modifica CI/CD, empaquetado de producción ni observabilidad. No se publicó ningún cambio remoto.
+| Operación | Resultado manual informado |
+|---|---|
+| Búsqueda, `GET /api/v1/gifs` | Exitosa utilizando GIPHY real. |
+| Consulta, `GET /api/v1/gifs/{id}` | Exitosa utilizando GIPHY real. |
+| Creación de favorito, `POST /api/v1/favorites` | Exitosa utilizando GIPHY real. |
+
+La fuente de esta evidencia es la confirmación del responsable del proyecto en la conversación de cierre. El agente registra esa confirmación y no afirma haber ejecutado nuevamente las solicitudes contra GIPHY. No se recibieron capturas ni salidas HTTP de ese recorrido; no se atribuyen códigos, IDs ni cuerpos de respuesta no observados. Este resultado levanta el bloqueo de la verificación inicial sin reemplazar su registro histórico de respuestas 503.
+
+Las pruebas automatizadas listadas arriba se ejecutaron durante la implementación y no se reejecutaron en este cierre, que solo modifica documentación. Las suites mantienen las simulaciones de GIPHY y el bloqueo de HTTP externo. Con esas verificaciones y la prueba manual informada, no quedan verificaciones pendientes de la fase 1; la revisión e integración del Pull Request a `main` siguen pendientes.
+
+## Comprobación de secretos antes de publicar
+
+Al iniciar el cierre se verificó que la rama era `feat/openapi-documentation` y el árbol de trabajo estaba limpio. Se comprobó que `.env` está ignorado y no versionado, y se buscó el valor de la clave GIPHY configurada localmente, sin mostrarlo, en los 171 archivos versionados y en todos los objetos locales de Git: 173 blobs, 81 árboles y 11 commits, incluidos objetos sin referencia. No hubo coincidencias.
+
+Esta comprobación se limita al valor de la clave configurada y al contenido disponible en el repositorio local; no es una auditoría general de otros secretos. La clave no se incorpora a la documentación ni al texto del PR.
+
+Esta fase no modifica CI/CD, empaquetado de producción ni observabilidad. El cierre se entrega mediante publicación de la rama y apertura de un Pull Request; el merge no forma parte de esta entrega.
