@@ -5,11 +5,13 @@ use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Laravel\Passport\ClientRepository;
+use Laravel\Passport\Passport;
 
 require __DIR__.'/../vendor/autoload.php';
 $app = require __DIR__.'/../bootstrap/app.php';
 $app->make(ConsoleKernel::class)->bootstrap();
-$file = storage_path('login-verification.key');
+$file = $argv[2] ?? sys_get_temp_dir().'/login-verification.key';
 $mode = $argv[1] ?? '';
 if ($mode === 'write') {
     if (file_exists($file)) {
@@ -28,14 +30,19 @@ if ($mode === 'write') {
     $kernel->terminate($request, $response);
     file_put_contents($file, json_encode([
         'token' => $data['access_token'], 'user_id' => $data['user']['id'],
-        'private' => hash_file('sha256', storage_path('oauth-private.key')),
-        'public' => hash_file('sha256', storage_path('oauth-public.key')),
+        'app_key' => hash('sha256', config('app.key')),
+        'client' => app(ClientRepository::class)->personalAccessClient('users')->id,
+        'private' => hash_file('sha256', Passport::keyPath('oauth-private.key')),
+        'public' => hash_file('sha256', Passport::keyPath('oauth-public.key')),
     ]));
     chmod($file, 0600);
 } elseif ($mode === 'read') {
     $data = json_decode(file_get_contents($file), true);
+    if ($data['app_key'] !== hash('sha256', config('app.key')) || $data['client'] !== app(ClientRepository::class)->personalAccessClient('users')->id) {
+        throw new RuntimeException('APP_KEY or OAuth client changed.');
+    }
     foreach (['private', 'public'] as $key) {
-        if ($data[$key] !== hash_file('sha256', storage_path('oauth-'.$key.'.key'))) {
+        if ($data[$key] !== hash_file('sha256', Passport::keyPath('oauth-'.$key.'.key'))) {
             throw new RuntimeException('Passport key changed.');
         }
     }

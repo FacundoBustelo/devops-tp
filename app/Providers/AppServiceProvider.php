@@ -43,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Passport::loadKeysFrom(storage_path('passport'));
         Passport::personalAccessTokensExpireIn(new \DateInterval('PT30M'));
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(5)->by($request->ip())
         );
