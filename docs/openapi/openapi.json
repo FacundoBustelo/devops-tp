@@ -1,0 +1,858 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Prex API v1",
+        "description": "Autenticación, catálogo GIPHY y favoritos. Enviar Accept: application/json y Content-Type: application/json para los cuerpos JSON. Los textos conservan espacios y mayúsculas. Los ejemplos son sintéticos.",
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/license/mit"
+        },
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "/",
+            "description": "Mismo origen que Swagger UI"
+        }
+    ],
+    "paths": {
+        "/api/v1/gifs/{id}": {
+            "get": {
+                "tags": [
+                    "GIFs"
+                ],
+                "summary": "Consultar un GIF por ID",
+                "description": "Solo lee el ID de la ruta, con comparación exacta. Codificar el segmento en la URL; las barras, incluso codificadas, no pertenecen a esta ruta.",
+                "operationId": "getGifById",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/components/schemas/GifId"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GIF encontrado.",
+                        "headers": {
+                            "X-Request-ID": {
+                                "$ref": "#/components/headers/RequestId"
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GifResult"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Validation"
+                    },
+                    "500": {
+                        "$ref": "#/components/responses/ServerError"
+                    },
+                    "502": {
+                        "$ref": "#/components/responses/BadGateway"
+                    },
+                    "503": {
+                        "$ref": "#/components/responses/Unavailable"
+                    },
+                    "504": {
+                        "$ref": "#/components/responses/Timeout"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/login": {
+            "post": {
+                "tags": [
+                    "Autenticación"
+                ],
+                "summary": "Obtener un token personal",
+                "description": "Login público. Cinco intentos por minuto y por IP, incluidos los intentos con datos inválidos. El token dura 1800 segundos.",
+                "operationId": "login",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginInput"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Token emitido.",
+                        "headers": {
+                            "X-Request-ID": {
+                                "$ref": "#/components/headers/RequestId"
+                            },
+                            "Cache-Control": {
+                                "description": "Impide almacenar la respuesta con el token.",
+                                "schema": {
+                                    "type": "string",
+                                    "example": "no-store"
+                                }
+                            },
+                            "X-RateLimit-Limit": {
+                                "$ref": "#/components/headers/RateLimit"
+                            },
+                            "X-RateLimit-Remaining": {
+                                "$ref": "#/components/headers/RateRemaining"
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LoginResult"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/InvalidCredentials"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Validation"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/Throttled"
+                    },
+                    "500": {
+                        "$ref": "#/components/responses/ServerError"
+                    }
+                },
+                "security": []
+            }
+        },
+        "/api/v1/favorites": {
+            "post": {
+                "tags": [
+                    "Favoritos"
+                ],
+                "summary": "Guardar un GIF como favorito",
+                "description": "Requiere cuerpo JSON y USER_ID igual al actor autenticado. Consulta GIPHY antes de guardar. El mismo usuario/GIF devuelve 409 y conserva el alias anterior.",
+                "operationId": "saveFavoriteGif",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/FavoriteInput"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Favorito y auditoría guardados en la misma transacción.",
+                        "headers": {
+                            "X-Request-ID": {
+                                "$ref": "#/components/headers/RequestId"
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FavoriteResult"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/Conflict"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Validation"
+                    },
+                    "500": {
+                        "$ref": "#/components/responses/ServerError"
+                    },
+                    "502": {
+                        "$ref": "#/components/responses/BadGateway"
+                    },
+                    "503": {
+                        "$ref": "#/components/responses/Unavailable"
+                    },
+                    "504": {
+                        "$ref": "#/components/responses/Timeout"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/gifs": {
+            "get": {
+                "tags": [
+                    "GIFs"
+                ],
+                "summary": "Buscar GIFs",
+                "description": "Solo lee parámetros de query string. Una búsqueda sin resultados devuelve 200 con data vacío.",
+                "operationId": "searchGifs",
+                "parameters": [
+                    {
+                        "name": "QUERY",
+                        "in": "query",
+                        "description": "Término UTF-8 no blanco; se conservan espacios.",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 50,
+                            "minLength": 1
+                        },
+                        "example": "gatos"
+                    },
+                    {
+                        "name": "LIMIT",
+                        "in": "query",
+                        "description": "Entero decimal de dígitos, sin signo ni espacios.",
+                        "schema": {
+                            "type": "integer",
+                            "default": 25,
+                            "maximum": 50,
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "OFFSET",
+                        "in": "query",
+                        "description": "Entero decimal de dígitos, sin signo ni espacios.",
+                        "schema": {
+                            "type": "integer",
+                            "default": 0,
+                            "maximum": 4999,
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resultados y paginación.",
+                        "headers": {
+                            "X-Request-ID": {
+                                "$ref": "#/components/headers/RequestId"
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SearchResult"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Validation"
+                    },
+                    "500": {
+                        "$ref": "#/components/responses/ServerError"
+                    },
+                    "502": {
+                        "$ref": "#/components/responses/BadGateway"
+                    },
+                    "503": {
+                        "$ref": "#/components/responses/Unavailable"
+                    },
+                    "504": {
+                        "$ref": "#/components/responses/Timeout"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "LoginInput": {
+                "required": [
+                    "email",
+                    "password"
+                ],
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "example": "persona@example.test"
+                    },
+                    "password": {
+                        "description": "Contraseña del usuario; se conservan los espacios.",
+                        "type": "string",
+                        "format": "password",
+                        "writeOnly": true,
+                        "minLength": 1
+                    }
+                },
+                "type": "object"
+            },
+            "LoginResult": {
+                "required": [
+                    "access_token",
+                    "token_type",
+                    "expires_in",
+                    "user"
+                ],
+                "properties": {
+                    "access_token": {
+                        "description": "Token personal para Authorization: Bearer.",
+                        "type": "string"
+                    },
+                    "token_type": {
+                        "type": "string",
+                        "enum": [
+                            "Bearer"
+                        ]
+                    },
+                    "expires_in": {
+                        "description": "Vigencia en segundos.",
+                        "type": "integer",
+                        "enum": [
+                            1800
+                        ]
+                    },
+                    "user": {
+                        "required": [
+                            "id"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer",
+                                "format": "int64",
+                                "example": 1,
+                                "minimum": 1
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "GifId": {
+                "description": "Texto UTF-8 con al menos un carácter no blanco. Se conserva exactamente, incluidos espacios y ceros iniciales.",
+                "type": "string",
+                "pattern": "\\S",
+                "example": "demoGif01",
+                "maxLength": 128,
+                "minLength": 1
+            },
+            "Gif": {
+                "required": [
+                    "id",
+                    "title",
+                    "url",
+                    "image_url"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "demoGif01",
+                        "minLength": 1
+                    },
+                    "title": {
+                        "description": "Puede ser vacío.",
+                        "type": "string",
+                        "example": "GIF de demostración"
+                    },
+                    "url": {
+                        "type": "string",
+                        "format": "uri",
+                        "example": "https://example.test/gifs/demoGif01"
+                    },
+                    "image_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "example": "https://example.test/images/demo.gif"
+                    }
+                },
+                "type": "object"
+            },
+            "SearchResult": {
+                "required": [
+                    "data",
+                    "pagination"
+                ],
+                "properties": {
+                    "data": {
+                        "description": "Puede ser una lista vacía.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Gif"
+                        }
+                    },
+                    "pagination": {
+                        "required": [
+                            "limit",
+                            "offset",
+                            "count"
+                        ],
+                        "properties": {
+                            "limit": {
+                                "type": "integer",
+                                "example": 25,
+                                "maximum": 50,
+                                "minimum": 1
+                            },
+                            "offset": {
+                                "type": "integer",
+                                "example": 0,
+                                "maximum": 4999,
+                                "minimum": 0
+                            },
+                            "count": {
+                                "description": "Cantidad de GIFs devueltos.",
+                                "type": "integer",
+                                "example": 1,
+                                "minimum": 0
+                            },
+                            "total_count": {
+                                "description": "Solo se incluye si GIPHY informa el total.",
+                                "type": "integer",
+                                "example": 10,
+                                "minimum": 0
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "GifResult": {
+                "required": [
+                    "data"
+                ],
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/Gif"
+                    }
+                },
+                "type": "object"
+            },
+            "FavoriteInput": {
+                "required": [
+                    "GIF_ID",
+                    "ALIAS",
+                    "USER_ID"
+                ],
+                "properties": {
+                    "GIF_ID": {
+                        "$ref": "#/components/schemas/GifId"
+                    },
+                    "ALIAS": {
+                        "description": "Texto UTF-8 no blanco; se conservan los espacios.",
+                        "type": "string",
+                        "pattern": "\\S",
+                        "example": "Mi GIF de demostración",
+                        "maxLength": 100,
+                        "minLength": 1
+                    },
+                    "USER_ID": {
+                        "description": "Debe coincidir con user.id del login. Entero positivo hasta PHP_INT_MAX (9223372036854775807), o cadena de dígitos con ese valor; admite ceros iniciales. No admite números JSON decimales ni notación exponencial.",
+                        "example": 1,
+                        "oneOf": [
+                            {
+                                "type": "integer",
+                                "format": "int64",
+                                "maximum": 9223372036854775807,
+                                "minimum": 1
+                            },
+                            {
+                                "type": "string",
+                                "pattern": "^0*[1-9][0-9]*$"
+                            }
+                        ]
+                    }
+                },
+                "type": "object"
+            },
+            "FavoriteResult": {
+                "required": [
+                    "data"
+                ],
+                "properties": {
+                    "data": {
+                        "required": [
+                            "id",
+                            "user_id",
+                            "gif_id",
+                            "alias",
+                            "created_at",
+                            "updated_at"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer",
+                                "format": "int64",
+                                "example": 1,
+                                "minimum": 1
+                            },
+                            "user_id": {
+                                "type": "integer",
+                                "format": "int64",
+                                "example": 1,
+                                "minimum": 1
+                            },
+                            "gif_id": {
+                                "$ref": "#/components/schemas/GifId"
+                            },
+                            "alias": {
+                                "type": "string",
+                                "example": "Mi GIF de demostración"
+                            },
+                            "created_at": {
+                                "description": "UTC, sin fracciones de segundo.",
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2026-01-01T12:00:00Z"
+                            },
+                            "updated_at": {
+                                "description": "UTC, sin fracciones de segundo.",
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2026-01-01T12:00:00Z"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "Error": {
+                "required": [
+                    "message"
+                ],
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "example": "Error del servidor."
+                    }
+                },
+                "type": "object"
+            },
+            "ValidationError": {
+                "required": [
+                    "message",
+                    "errors"
+                ],
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "enum": [
+                            "Datos inválidos."
+                        ]
+                    },
+                    "errors": {
+                        "description": "Mensajes sanitizados agrupados por campo; el texto de cada validación puede variar.",
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "type": "object"
+            }
+        },
+        "responses": {
+            "InvalidCredentials": {
+                "description": "Email o contraseña incorrectos.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "Credenciales inválidas."
+                        }
+                    }
+                }
+            },
+            "Unauthenticated": {
+                "description": "Token ausente, inválido, vencido o revocado.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "No autenticado."
+                        }
+                    }
+                }
+            },
+            "Forbidden": {
+                "description": "USER_ID no coincide con el usuario autenticado.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "Acceso denegado."
+                        }
+                    }
+                }
+            },
+            "NotFound": {
+                "description": "El GIF solicitado no existe.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "Recurso no encontrado."
+                        }
+                    }
+                }
+            },
+            "Conflict": {
+                "description": "Ya existe un favorito del usuario para ese GIF; el alias no se modifica.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "El favorito ya existe."
+                        }
+                    }
+                }
+            },
+            "ServerError": {
+                "description": "Fallo interno de infraestructura.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "Error del servidor."
+                        }
+                    }
+                }
+            },
+            "BadGateway": {
+                "description": "GIPHY devolvió una respuesta incompatible.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "Error del servidor."
+                        }
+                    }
+                }
+            },
+            "Unavailable": {
+                "description": "GIPHY no está disponible, rechazó la clave, agotó la cuota o falta configuración.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "Error del servidor."
+                        }
+                    }
+                }
+            },
+            "Timeout": {
+                "description": "Timeout de GIPHY (conexión 2 s, total 5 s por defecto), sin reintentos.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "Error del servidor."
+                        }
+                    }
+                }
+            },
+            "Validation": {
+                "description": "Datos inválidos. Las entradas no se recortan ni se convierten a null.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        }
+                    }
+                }
+            },
+            "Throttled": {
+                "description": "Sexto intento de login en un minuto por IP. Los intentos inválidos también cuentan.",
+                "headers": {
+                    "X-Request-ID": {
+                        "$ref": "#/components/headers/RequestId"
+                    },
+                    "X-RateLimit-Limit": {
+                        "$ref": "#/components/headers/RateLimit"
+                    },
+                    "X-RateLimit-Remaining": {
+                        "$ref": "#/components/headers/RateRemaining"
+                    },
+                    "Retry-After": {
+                        "description": "Segundos hasta poder reintentar.",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    "X-RateLimit-Reset": {
+                        "description": "Instante Unix de reinicio de la ventana.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                },
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Error"
+                        },
+                        "example": {
+                            "message": "Demasiadas solicitudes."
+                        }
+                    }
+                }
+            }
+        },
+        "headers": {
+            "RequestId": {
+                "description": "UUID generado por el servidor para correlacionar la auditoría; no reutiliza el valor enviado por el cliente.",
+                "schema": {
+                    "type": "string",
+                    "format": "uuid"
+                }
+            },
+            "RateLimit": {
+                "description": "Máximo de intentos de login por minuto y por IP.",
+                "schema": {
+                    "type": "integer",
+                    "enum": [
+                        5
+                    ]
+                }
+            },
+            "RateRemaining": {
+                "description": "Intentos de login restantes en la ventana actual.",
+                "schema": {
+                    "type": "integer",
+                    "maximum": 5,
+                    "minimum": 0
+                }
+            }
+        },
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "description": "Ejecutar login y copiar access_token en Authorize, sin el prefijo Bearer. Vence en 1800 segundos. No se conserva al recargar la página.",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Autenticación",
+            "description": "Login público y emisión de tokens personales."
+        },
+        {
+            "name": "GIFs",
+            "description": "Búsqueda y consulta mediante GIPHY."
+        },
+        {
+            "name": "Favoritos",
+            "description": "Guardado de GIFs del usuario autenticado."
+        }
+    ]
+}
