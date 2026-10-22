@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Http;
 use Laravel\Passport\Passport;
 use Tests\Support\IsolatedDatabase;
 use Tests\Support\OfflineHttp;
+use Tests\Support\PassportKeys;
 
 // Executed only by the isolated MySQL integration test, never exposed as a route.
 require dirname(__DIR__, 2).'/vendor/autoload.php';
@@ -16,6 +17,7 @@ $app->make(Kernel::class)->bootstrap();
 
 IsolatedDatabase::assertAllowed(DB::getDriverName(), DB::connection()->getDatabaseName(), true);
 [$script, $userId, $barrier, $label] = $argv;
+PassportKeys::configure();
 Passport::actingAs(User::findOrFail($userId));
 OfflineHttp::configure();
 Http::fake(function () use ($barrier, $label) {
