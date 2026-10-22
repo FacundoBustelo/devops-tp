@@ -1,0 +1,22 @@
+# Optional live source. Dependencies and writable runtime directories stay in the image.
+services:
+  init:
+    volumes:
+      - ./app:/var/www/html/app:ro
+      - ./config:/var/www/html/config:ro
+      - ./routes:/var/www/html/routes:ro
+      - ./resources:/var/www/html/resources:ro
+      - ./database:/var/www/html/database:ro
+      - ./docs/openapi:/var/www/html/docs/openapi:ro
+  app:
+    volumes:
+      - ./app:/var/www/html/app:ro
+      - ./config:/var/www/html/config:ro
+      - ./routes:/var/www/html/routes:ro
+      - ./resources:/var/www/html/resources:ro
+      - ./database:/var/www/html/database:ro
+      - ./docs/openapi:/var/www/html/docs/openapi:ro
+      - ./tests:/var/www/html/tests:ro
+  nginx:
+    volumes:
+      - ./public:/var/www/html/public:ro
