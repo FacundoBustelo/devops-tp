@@ -2,7 +2,7 @@
 
 API PrexChallenge: Laravel 13.35.0, Passport 13.9.0, PHP 8.4.26 y MySQL 8.4.11. Ofrece autenticación, búsqueda y consulta de GIFs con GIPHY, favoritos y auditoría en MySQL, con arquitectura hexagonal.
 
-La fase 1 incorpora [Swagger y OpenAPI](docs/openapi/validation.md). La fase 3 incorpora imágenes autocontenidas, construcción multietapa y ejecución sin root ([evidencia](docs/docker/validation.md)). La fase 4 incorpora CI y el procedimiento de publicación versionada en Docker Hub ([validación y límites](docs/cicd/validation.md)). La activación en GitHub, el ruleset y la publicación real siguen pendientes; no se incorpora despliegue ni observabilidad ampliada.
+La fase 1 incorpora [Swagger y OpenAPI](docs/openapi/validation.md). La fase 3 incorpora imágenes autocontenidas, construcción multietapa y ejecución sin root ([evidencia](docs/docker/validation.md)). La fase 4 incorpora CI y el procedimiento de publicación versionada en Docker Hub ([validación y límites](docs/cicd/validation.md)). La versión `v1.0.0` ya fue publicada; se conserva la evidencia histórica de fase 4 y se registra su cierre posterior. La fase 5 agrega [logs seguros, Prometheus y Grafana opcionales](docs/observability/README.md), con [resultados de validación](docs/observability/validation.md). No hay despliegue automático.
 
 Se usa GitHub Flow con ramas cortas y revisión por Pull Request, Conventional Commits y versiones SemVer `vMAJOR.MINOR.PATCH`. `main` debe permanecer estable.
 
@@ -175,7 +175,7 @@ Con Node.js disponible y vendor del lock en el host, `node scripts/verify-docs.m
 
 ## CI y publicación de imágenes
 
-`.github/workflows/ci.yml` corre en cada PR hacia `main` y puede reutilizarse mediante `workflow_call`. Calidad ejecuta Pint, las seis pruebas existentes de OpenAPI y las pruebas de protección del publicador. PHPUnit corre en una matriz SQLite/MySQL, usando el target `development`, las configuraciones existentes y `compose.audit-test.yaml`. El job final **CI Required** exige éxito de calidad y de toda la matriz, aunque haya fallos, cancelaciones o jobs omitidos. No hay filtros por archivos que dejen PRs sin check.
+`.github/workflows/ci.yml` corre en cada PR hacia `main` y puede reutilizarse mediante `workflow_call`. Calidad ejecuta Pint, las seis pruebas existentes de OpenAPI y las pruebas de protección del publicador. PHPUnit corre en una matriz SQLite/MySQL, usando el target `development`, las configuraciones existentes y `compose.audit-test.yaml`. El job `observability` valida los runtimes, métricas SQLite compartidas, seguridad, reglas y Grafana sin GIPHY. El job final **CI Required** exige éxito de calidad, observabilidad y de toda la matriz, aunque haya fallos, cancelaciones o jobs omitidos. No hay filtros por archivos que dejen PRs sin check.
 
 Se pueden repetir los jobs sin preparar `.env` (Docker Engine, Buildx, Compose moderno y Python 3; las pruebas de imágenes finales también necesitan Node.js 22 o superior):
 
@@ -189,7 +189,7 @@ Después de revisar e integrar el código, configurar en GitHub las variables de
 
 Ejecutar CI en GitHub y configurar el ruleset de `main` para exigir Pull Request y el check **CI Required**, con la rama actualizada antes de integrar y sin bypass que permita omitirlo. Comprobar con un PR fallido que GitHub bloquea el merge y con su corrección que lo habilita. **Stop-the-Line solo será efectivo después de configurar y comprobar ese requisito.** La presencia del YAML por sí sola no protege `main`.
 
-`.github/workflows/release.yml` se dispara al publicar tags `v*` y rechaza los que no sean `vMAJOR.MINOR.PATCH` estables, sin ceros iniciales, prereleases ni metadatos. Verifica que el commit pertenezca al historial actual de `main` y ejecuta CI antes del job de publicación. La pertenencia admite commits anteriores de `main`; no exige que el tag apunte a su punta. Crear y publicar un tag constituye la operación de release y requiere la autorización posterior del responsable; no se ejecutó durante esta implementación.
+`.github/workflows/release.yml` se dispara al publicar tags `v*` y rechaza los que no sean `vMAJOR.MINOR.PATCH` estables, sin ceros iniciales, prereleases ni metadatos. Verifica que el commit pertenezca al historial actual de `main` y ejecuta CI antes del job de publicación. La pertenencia admite commits anteriores de `main`; no exige que el tag apunte a su punta. Crear y publicar un tag constituye la operación de release y requiere la autorización posterior del responsable; no se ejecutó durante la implementación original de fase 4. Posteriormente se publicó `v1.0.0`; esta fase no crea tags ni publica nuevas imágenes.
 
 El job verifica que ambos repositorios sean públicos y que ninguna de las dos versiones exista. Construye una sola vez cada target `runtime` y `nginx` para `linux/amd64` con `--load`, asignando versión sin `v` y SHA completo en etiquetas OCI. Arranca esas imágenes con Compose `--no-build --pull never`, prueba inicialización, salud, acceso SQL sin root, directorios escribibles, Swagger y assets. Luego autentica, vuelve a comprobar disponibilidad y publica **esas mismas imágenes locales** con `docker push`, sin reconstrucción ni etiqueta `latest`:
 

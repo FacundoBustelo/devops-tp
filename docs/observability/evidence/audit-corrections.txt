@@ -1,0 +1,39 @@
+2026-10-22 — post-audit local checks; no commits/publications.
+Original configuration: {"expected_regression_failure": "413 sensitive marker leaked to a container log/file", "nginx_413_native_error": true, "raw_query_present": true, "client_ip_context_present": true}
+Corrected standalone 413 check (exit 0):
+PASS header / audit / JSON log correlation: 4d65aeb3-f78d-4a6c-a0e3-6936764192ac
+PASS 413 regression: Content-Length=2097152; pre-Laravel rejection; no marker in all Compose logs or regular log/temp files; safe Nginx JSON 413 and Laravel JSON; health/docs/metrics unchanged
+nginx -V: 1.30.5; nginx -t: success; invalid directive test: expected exit 1, stderr diagnostic retained.
+bash scripts/ci/check.sh quality (exit 0):
+Python publisher: 7 tests; Pint: 128 files; OpenAPI: 6 tests, 328 assertions.
+bash scripts/ci/check.sh sqlite (exit 0):
+79 tests, 2780 assertions.
+bash scripts/ci/check-observability.sh (exit 0):
+PASS base Compose: API, logs, health, Swagger; no metrics directory or monitoring services
+  SUCCESS: 1 rule files found
+ SUCCESS: /etc/prometheus/prometheus.yml is valid prometheus config file syntax
+  SUCCESS: 2 rules found
+  SUCCESS: 2 rules found
+  SUCCESS
+PASS public security: 78 raw requests
+PASS Grafana authentication, provisioning and real datasource queries: [{"panel": "Solicitudes por segundo", "series": 1, "values": ["0"]}, {"panel": "Tráfico por ruta y estado", "series": 30, "values": ["0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"]}, {"panel": "Errores 4xx", "series": 1, "values": ["0"]}, {"panel": "Errores 5xx", "series": 1, "values": ["0"]}, {"panel": "Porcentaje 5xx", "series": 0, "values": []}, {"panel": "Latencia media", "series": 0, "values": []}, {"panel": "Latencia p95", "series": 0, "values": []}, {"panel": "Target Laravel", "series": 1, "values": ["1"]}, {"panel": "Alertas activas", "series": 0, "values": []}]
+PASS actual idle state: up=1, RPS=0, ratio/latencies absent
+PASS header / audit / JSON log correlation: 4b6f127a-bf48-4997-ac6b-e7bc44ee075a
+PASS 413 regression: Content-Length=2097152; pre-Laravel rejection; no marker in all Compose logs or regular log/temp files; safe Nginx JSON 413 and Laravel JSON; health/docs/metrics unchanged
+PASS 200 requests, concurrency 8, 4 FPM workers, 6 coherent concurrent scrapes
+PASS restart preserves SQLite counters
+PASS recreation resets metrics and preserves audit / Passport
+PASS 200 requests, concurrency 8, 4 FPM workers, 6 coherent concurrent scrapes
+PASS header / audit / JSON log correlation: 9be5cd00-a8dc-424a-aacb-281d36678d51
+PASS real SQLite lock: bounded wait, unchanged 401, coherent unchanged scrape
+PASS inaccessible metrics storage preserves 401; scrape returns 503
+PASS Grafana authentication, provisioning and real datasource queries: [{"panel": "Solicitudes por segundo", "series": 1, "values": ["2.165739285714286"]}, {"panel": "Tráfico por ruta y estado", "series": 30, "values": ["0", "2.165739285714286", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"]}, {"panel": "Errores 4xx", "series": 1, "values": ["2.165739285714286"]}, {"panel": "Errores 5xx", "series": 1, "values": ["0"]}, {"panel": "Porcentaje 5xx", "series": 1, "values": ["0"]}, {"panel": "Latencia media", "series": 1, "values": ["0.013114417574074071"]}, {"panel": "Latencia p95", "series": 1, "values": ["0.02422115384615385"]}, {"panel": "Target Laravel", "series": 1, "values": ["1"]}, {"panel": "Alertas activas", "series": 0, "values": []}]
+promtool check metrics: exit 0 (silent success).
+Visual verification (exit 0):
+PASS authenticated dashboard screenshot: docs/observability/evidence/grafana-audit-5xx.png
+PASS authenticated dashboard screenshot: docs/observability/evidence/grafana-audit-down.png
+PASS Grafana authentication, provisioning and real datasource queries: [{"panel": "Solicitudes por segundo", "series": 1, "values": ["0.05207142857142857"]}, {"panel": "Tráfico por ruta y estado", "series": 30, "values": ["0", "0.009523809523809523", "0", "0", "0", "0.034038095238095235", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0.008509523809523809", "0", "0", "0", "0"]}, {"panel": "Errores 4xx", "series": 1, "values": ["0.009523809523809523"]}, {"panel": "Errores 5xx", "series": 1, "values": ["0.034038095238095235"]}, {"panel": "Porcentaje 5xx", "series": 1, "values": ["65.36808413351623"]}, {"panel": "Latencia media", "series": 1, "values": ["0.0297575238"]}, {"panel": "Latencia p95", "series": 1, "values": ["0.04791666666666666"]}, {"panel": "Target Laravel", "series": 1, "values": ["1"]}, {"panel": "Alertas activas", "series": 0, "values": []}]
+PASS visual fixtures: real elevated 5xx and up=0; storage restored, two successful scrapes
+All temporary Compose projects created for these checks removed with their volumes.
+No full MySQL suite or external GIPHY demo rerun in this correction.
+Source file digest: 418af1a296ccac97704afd76092b408eb659502025bbd677d4f3869b9a4843f4 (161 files; exact list in audit-corrections.json).

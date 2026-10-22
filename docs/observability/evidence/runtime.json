@@ -1,0 +1,112 @@
+{
+  "recorded_at": "2026-10-22T21:26:36.714938+00:00",
+  "base_commit": "8271f9b14c3f217dff0b25e2ef460b7c22486842",
+  "branch": "feat/observability",
+  "uncommitted_implementation": true,
+  "source_files_sha256": "5cb9c86941af1d0cc360b1e17ca6cd651b7e23ef0f4cd1551690d1c464d43b3e",
+  "source_files_count": 160,
+  "demo_images": [
+    {
+      "ID": "sha256:876ae6bcb0d6c9190d799e82c996fbe5faecdaaa0ec84f5e7dd272c0542ea63c",
+      "ContainerName": "devops-obs-phase5-prometheus-1",
+      "Repository": "prom/prometheus",
+      "Tag": "",
+      "Platform": "linux/amd64",
+      "Size": 265666417,
+      "Created": "2026-10-21T14:04:11.99362206Z"
+    },
+    {
+      "ID": "sha256:45900b2eda7da0cbda80b9025e446147d9085fee71675ba86a48a1cad34e4c8a",
+      "ContainerName": "devops-obs-phase5-grafana-1",
+      "Repository": "grafana/grafana",
+      "Tag": "",
+      "Platform": "linux/amd64",
+      "Size": 1415053397,
+      "Created": "2026-10-12T12:57:33Z"
+    },
+    {
+      "ID": "sha256:8d132912e9d3c985237567595ec2aeae04936044eb1f9336e8e4da2326238b84",
+      "ContainerName": "devops-obs-phase5-mysql-1",
+      "Repository": "mysql",
+      "Tag": "",
+      "Platform": "linux/amd64",
+      "Size": 813019616,
+      "Created": "2026-09-29T18:39:48.795199311Z"
+    },
+    {
+      "ID": "sha256:be77d97f15c286b45d5b90498d209643f5d019823c8b898b67188bd2f4b7dd8f",
+      "ContainerName": "devops-obs-phase5-nginx-1",
+      "Repository": "devops-obs-phase5-nginx",
+      "Tag": "0.0.0-phase5",
+      "Platform": "linux/amd64",
+      "Size": 62396798,
+      "Created": "2026-10-22T18:12:23.238968341-03:00",
+      "LastTagTime": "2026-10-22T18:12:23.301325178-03:00"
+    },
+    {
+      "ID": "sha256:863edc2d88b4a0fd72f758256b13e135ded5905b456e30cd5d2d33a4d493ed68",
+      "ContainerName": "devops-obs-phase5-app-1",
+      "Repository": "devops-obs-phase5-php",
+      "Tag": "0.0.0-phase5",
+      "Platform": "linux/amd64",
+      "Size": 176961653,
+      "Created": "2026-10-22T18:14:15.536282816-03:00",
+      "LastTagTime": "2026-10-22T18:14:16.802240657-03:00"
+    },
+    {
+      "ID": "sha256:b03021558a389595dece802979631903dea049e04f78a35db20c74df74581bcc",
+      "ContainerName": "devops-obs-phase5-init-1",
+      "Repository": "",
+      "Tag": "",
+      "Platform": "linux/amd64",
+      "Size": 176961604,
+      "Created": "2026-10-22T18:07:31.004023874-03:00",
+      "LastTagTime": "2026-10-22T18:07:32.238899537-03:00"
+    }
+  ],
+  "ci_runtime_images": {
+    "nginx": "sha256:a06c808073eadfb1b121c5cbbe4c1f7e48ce92e03dffd5b00d8a330c1e71a86a",
+    "php": "sha256:59146a99d289f8610757e9c13ad3184cba4f2559d90631428943f5e3caef1691"
+  },
+  "runtime": {
+    "php": "8.4.26",
+    "sqlite": "3.53.4"
+  },
+  "users": {
+    "app": "uid=82(www-data) gid=82(www-data) groups=82(www-data),82(www-data)",
+    "nginx": "uid=101(nginx) gid=101(nginx) groups=101(nginx),101(nginx)",
+    "prometheus": "uid=65534(nobody) gid=65534(nobody) groups=65534(nobody)",
+    "grafana": "uid=472(grafana) gid=0(root) groups=0(root),0(root)",
+    "mysql_server": "Name:\tmysqld\nUid:\t999\t999\t999\t999\nGid:\t999\t999\t999\t999"
+  },
+  "checks": {
+    "quality": {
+      "passed": true,
+      "phpunit": [
+        {
+          "tests": 6,
+          "assertions": 328
+        }
+      ],
+      "publisher_python_tests": 7
+    },
+    "sqlite": {
+      "passed": true,
+      "phpunit": [
+        {
+          "tests": 79,
+          "assertions": 2780
+        }
+      ]
+    },
+    "mysql": {
+      "passed": true,
+      "phpunit": [
+        {
+          "tests": 82,
+          "assertions": 2806
+        }
+      ]
+    }
+  }
+}
