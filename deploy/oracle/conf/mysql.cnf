@@ -1,0 +1,18 @@
+[mysqld]
+innodb_dedicated_server=OFF
+innodb_buffer_pool_size=128M
+innodb_log_buffer_size=8M
+innodb_redo_log_capacity=64M
+max_connections=20
+thread_cache_size=4
+table_open_cache=256
+performance_schema=OFF
+tmp_table_size=8M
+max_heap_table_size=8M
+temptable_max_ram=16M
+innodb_flush_log_at_trx_commit=1
+sync_binlog=1
+max_binlog_size=64M
+binlog_expire_logs_seconds=259200
+# X Protocol is unused; it must not create an unnecessary listener.
+mysqlx=OFF

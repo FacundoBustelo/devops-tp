@@ -1,0 +1,443 @@
+#!/usr/bin/env python3
+"""Local operations only. Explicit Compose file; never reads the checkout's .env."""
+import argparse
+import base64
+import contextlib
+import fcntl
+import getpass
+import gzip
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import signal
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_REVISION = "8c85178a6a1560e0d66334770ed2499855c2da59"
+VOLUMES = ("mysql", "passport", "caddy_data", "caddy_config")
+PACKAGE_FILES = (
+    "compose.prod.yaml", "compose.https.yaml", "deploy.env.example",
+    "conf/mysql.cnf", "conf/php.ini", "conf/zzzz-production.conf", "conf/nginx.conf", "conf/Caddyfile",
+    "bin/oracle", "bin/health.php", "bin/provision-user.php",
+    "systemd/devops-tp-health.service", "systemd/devops-tp-health.timer",
+    "systemd/devops-tp-backup.service", "systemd/devops-tp-backup.timer",
+)
+
+
+def checksum(path):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def run(command, **kwargs):
+    # Do not print commands, payloads, env files or captured exception output.
+    return subprocess.run(command, check=True, **kwargs)
+
+
+def private_file(path):
+    if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
+        raise ValueError(f"Expected a private regular file (0600): {path}")
+    if path.stat().st_uid != os.geteuid():
+        raise ValueError(f"File must be owned by the invoking user: {path}")
+
+
+def write_private(path, content):
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
+        stream.write(content)
+
+
+class Operations:
+    def __init__(self, args):
+        self.args = args
+        self.directory = Path(args.secrets_dir).resolve()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{2,60}", args.project):
+            raise ValueError("Invalid project name")
+        self.prefix = args.project.replace("-", "_")
+        # Keep ambient Docker context, but remove Compose interpolation controls.
+        self.env = {key: value for key, value in os.environ.items()
+                    if not key.startswith("COMPOSE_") and key not in
+                    ("DOMAIN", "ACME_EMAIL", "PROXY_SUBNET", "PROXY_IP", "PROXY_DYNAMIC_RANGE", "PUBLIC_BIND_IP")}
+        self.env.update(ORACLE_SECRETS_DIR=str(self.directory), VOLUME_PREFIX=self.prefix)
+
+    def package(self):
+        output = Path(self.args.output).resolve()
+        if output.is_relative_to(ROOT):
+            raise ValueError("Package output must reside outside deploy/oracle")
+        for name in PACKAGE_FILES:
+            source = ROOT / name
+            if source.is_symlink() or not source.is_file():
+                raise ValueError(f"Missing regular deployment file: {name}")
+        # Explicit allowlist excludes ignored files, env files, dumps and caches.
+        with output.open("xb") as stream:
+            with gzip.GzipFile(filename="", fileobj=stream, mode="wb", mtime=0) as compressed:
+                with tarfile.open(fileobj=compressed, mode="w|") as archive:
+                    for name in sorted(PACKAGE_FILES):
+                        source = ROOT / name
+                        info = tarfile.TarInfo(name)
+                        info.size = source.stat().st_size
+                        info.mode = 0o755 if name == "bin/oracle" else 0o644
+                        info.uid = info.gid = 0
+                        info.uname = info.gname = "root"
+                        with source.open("rb") as contents:
+                            archive.addfile(info, contents)
+        print(f"Deployment package: {output} ({len(PACKAGE_FILES)} allowlisted files)")
+
+    def prepare(self):
+        args = self.args
+        if not re.fullmatch(r"(?=.{1,253}$)[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", args.domain):
+            raise ValueError("Use a DNS hostname without scheme, port, whitespace or shell syntax")
+        if not re.fullmatch(r"[^\s=@$'\"<>]+@[^\s=@$'\"<>]+\.[^\s=@$'\"<>]+", args.email):
+            raise ValueError("Invalid ACME email")
+        network = ipaddress.ip_network(args.proxy_subnet, strict=True)
+        private_ranges = (ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("172.16.0.0/12"), ipaddress.ip_network("192.168.0.0/16"))
+        if network.version != 4 or network.prefixlen != 24 or not any(network.subnet_of(block) for block in private_ranges):
+            raise ValueError("Proxy subnet must be a private IPv4 /24")
+        checkout = next((path for path in ROOT.parents
+                         if (path / ".git").is_file() or (path / ".git/HEAD").is_file()), ROOT)
+        if self.directory.is_relative_to(checkout):
+            raise ValueError("Secrets must reside outside the repository")
+        self.directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+        if self.directory.stat().st_mode & 0o077 or self.directory.stat().st_uid != os.geteuid():
+            raise ValueError("Secrets directory must be owned by the invoking user and have mode 0700")
+        names = ("deploy.env", "app.env", "mysql.env", "backup.passphrase")
+        if any((self.directory / name).exists() or (self.directory / name).is_symlink() for name in names):
+            raise ValueError("Refusing to replace existing secrets; restore them or use an empty directory")
+        giphy = ""
+        if args.giphy_key_file:
+            key_file = Path(args.giphy_key_file)
+            private_file(key_file)
+            giphy = key_file.read_text().strip()
+            if not re.fullmatch(r"[A-Za-z0-9_-]{8,256}", giphy):
+                raise ValueError("Invalid GIPHY key file")
+        password = secrets.token_hex(32)
+        app_key = "base64:" + base64.b64encode(secrets.token_bytes(32)).decode()
+        deploy = f"DOMAIN={args.domain}\nACME_EMAIL={args.email}\nPROXY_SUBNET={network}\nPROXY_IP={network.network_address + 2}\nPROXY_DYNAMIC_RANGE={network.network_address + 128}/25\n"
+        app = {
+            "APP_NAME": "PrexChallenge", "APP_ENV": "production", "APP_DEBUG": "false",
+            "APP_KEY": app_key, "APP_URL": f"https://{args.domain}",
+            "APP_MAINTENANCE_DRIVER": "file", "BCRYPT_ROUNDS": "12",
+            "APP_LOCALE": "en", "APP_FALLBACK_LOCALE": "en", "METRICS_ENABLED": "false",
+            "LOG_CHANNEL": "stderr", "LOG_LEVEL": "info", "DB_CONNECTION": "mysql",
+            "DB_HOST": "mysql", "DB_PORT": "3306", "DB_DATABASE": "prex", "DB_USERNAME": "prex_app",
+            "DB_PASSWORD": password, "SESSION_DRIVER": "database", "SESSION_LIFETIME": "120",
+            "SESSION_SECURE_COOKIE": "true", "SESSION_HTTP_ONLY": "true", "SESSION_SAME_SITE": "lax",
+            "CACHE_STORE": "database", "QUEUE_CONNECTION": "sync", "FILESYSTEM_DISK": "local",
+            "MAIL_MAILER": "log", "GIPHY_API_KEY": giphy, "GIPHY_CONNECT_TIMEOUT": "2", "GIPHY_TIMEOUT": "5",
+        }
+        mysql = {"MYSQL_DATABASE": "prex", "MYSQL_USER": "prex_app", "MYSQL_PASSWORD": password,
+                 "MYSQL_ROOT_PASSWORD": secrets.token_hex(32)}
+        write_private(self.directory / "deploy.env", deploy)
+        for name, values in (("app.env", app), ("mysql.env", mysql)):
+            write_private(self.directory / name, "".join(f"{key}={value}\n" for key, value in values.items()))
+        write_private(self.directory / "backup.passphrase", secrets.token_hex(48) + "\n")
+        print("Private configuration created. Copy backup.passphrase separately to offline recovery storage.")
+        if not giphy:
+            print("GIPHY is unconfigured; catalog endpoints require a valid key before acceptance.")
+
+    def config(self):
+        for name in ("deploy.env", "app.env", "mysql.env"):
+            private_file(self.directory / name)
+        return json.loads(self.dc("--profile", "https", "config", "--format", "json", stdout=subprocess.PIPE).stdout)
+
+    def dc(self, *command, **kwargs):
+        return run(["docker", "compose", "--project-directory", str(ROOT),
+                    "--env-file", str(self.directory / "deploy.env"), "-p", self.args.project,
+                    "-f", str(ROOT / "compose.prod.yaml"), *command], env=self.env, **kwargs)
+
+    def volume(self, suffix):
+        return f"{self.prefix}_{suffix}"
+
+    def create_volumes(self):
+        # Validate every existing name before creating or mounting any volume.
+        for suffix in VOLUMES:
+            result = subprocess.run(["docker", "volume", "inspect", self.volume(suffix)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0:
+                volume = json.loads(result.stdout)[0]
+                if (volume.get("Labels") or {}).get("devops.oracle.project") != self.args.project:
+                    raise ValueError("Volume name belongs to another project or has no ownership label; refusing reuse")
+            elif b"no such volume" not in result.stderr.lower():
+                raise ValueError("Cannot verify existing volumes; refusing initialization")
+        for suffix in VOLUMES:
+            run(["docker", "volume", "create", "--label", f"devops.oracle.project={self.args.project}",
+                 self.volume(suffix)], stdout=subprocess.DEVNULL)
+
+    def php(self, name, payload=None):
+        source = (ROOT / "bin" / name).read_text()
+        if payload is not None:
+            source = source.replace("@@PAYLOAD@@", base64.b64encode(json.dumps(payload).encode()).decode())
+        self.dc("exec", "-T", "app", "php", input=source.encode())
+
+    def initialize(self):
+        cfg = self.config()
+        if set(self.running()) & {"app", "nginx", "caddy"}:
+            raise ValueError("Application containers already run; use health or the documented maintenance procedure")
+        self.check_network(cfg)
+        self.dc("pull", "mysql", "init", "app", "nginx")
+        for service in ("app", "nginx"):
+            image = json.loads(run(["docker", "image", "inspect", cfg["services"][service]["image"]],
+                                   stdout=subprocess.PIPE).stdout)[0]
+            labels = image["Config"]["Labels"]
+            if image["Architecture"] != "amd64" or labels.get("org.opencontainers.image.version") != "1.1.0" or labels.get("org.opencontainers.image.revision") != EXPECTED_REVISION:
+                raise ValueError("Image metadata does not match the approved release")
+        self.create_volumes()
+        self.dc("up", "-d", "--no-build", "--pull", "never", "--wait", "--wait-timeout", "600")
+        self.health()
+        print("Initialized without public listeners and without starting Caddy.")
+
+    def check_network(self, cfg):
+        subnet = ipaddress.ip_network(cfg["networks"]["proxy"]["ipam"]["config"][0]["subnet"])
+        proxy = ipaddress.ip_address(cfg["services"]["caddy"]["networks"]["proxy"]["ipv4_address"])
+        if proxy not in subnet or proxy in (subnet.network_address, subnet.broadcast_address, subnet.network_address + 1):
+            raise ValueError("PROXY_IP must be a usable host in PROXY_SUBNET, excluding the gateway")
+        dynamic = ipaddress.ip_network(cfg["networks"]["proxy"]["ipam"]["config"][0]["ip_range"])
+        if not dynamic.subnet_of(subnet) or proxy in dynamic:
+            raise ValueError("Proxy dynamic allocation range must exclude the fixed Caddy address")
+        identifiers = run(["docker", "network", "ls", "-q"], stdout=subprocess.PIPE).stdout.decode().split()
+        if identifiers:
+            networks = json.loads(run(["docker", "network", "inspect", *identifiers], stdout=subprocess.PIPE).stdout)
+            for network in networks:
+                if (network.get("Labels") or {}).get("com.docker.compose.project") == self.args.project:
+                    continue
+                for item in (network.get("IPAM", {}).get("Config") or []):
+                    if item.get("Subnet"):
+                        other = ipaddress.ip_network(item["Subnet"])
+                        if other.version == subnet.version and other.overlaps(subnet):
+                            raise ValueError("Proxy subnet overlaps an existing Docker network; choose a different private /24")
+
+    def provision_user(self):
+        self.config()
+        if self.args.stdin:
+            payload = json.load(sys.stdin)
+        else:
+            payload = {"name": input("Name: "), "email": input("Email: "), "password": getpass.getpass("Password (16+ characters): ")}
+            if payload["password"] != getpass.getpass("Repeat password: "):
+                raise ValueError("Passwords do not match")
+        if (not isinstance(payload, dict) or set(payload) != {"name", "email", "password"}
+                or any(not isinstance(value, str) for value in payload.values())
+                or not 1 <= len(payload["name"]) <= 255
+                or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", payload["email"])
+                or len(payload["email"]) > 255 or len(payload["password"]) < 16
+                or len(payload["password"].encode()) > 72 or "\x00" in payload["password"]):
+            raise ValueError("Invalid user input; bcrypt passwords require at least 16 characters and at most 72 UTF-8 bytes")
+        self.php("provision-user.php", payload)
+
+    def running(self):
+        return self.dc("--profile", "https", "ps", "--status", "running", "--services", stdout=subprocess.PIPE).stdout.decode().split()
+
+    def health(self):
+        self.config()
+        for service in ("mysql", "app", "nginx"):
+            container = self.dc("ps", "-q", service, stdout=subprocess.PIPE).stdout.decode().strip()
+            if not container:
+                raise ValueError(f"Service is not running: {service}")
+            info = json.loads(run(["docker", "inspect", container], stdout=subprocess.PIPE).stdout)[0]
+            state = info["State"]
+            if state.get("OOMKilled") or state.get("Health", {}).get("Status") != "healthy":
+                raise ValueError(f"Service is unhealthy or was killed by OOM: {service}")
+        self.dc("exec", "-T", "nginx", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/up")
+        self.php("health.php")
+        if "caddy" in self.running():
+            self.dc("exec", "-T", "caddy", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/")
+        if self.args.https_url:
+            if not re.fullmatch(r"https://[a-zA-Z0-9.-]+(?::[0-9]+)?/up", self.args.https_url):
+                raise ValueError("HTTPS probe must be an https://hostname/up URL")
+            run(["curl", "--fail", "--silent", "--show-error", "--max-time", "20", self.args.https_url], stdout=subprocess.DEVNULL)
+        for path in (self.directory, Path("/var/lib/docker")):
+            if path.exists() and shutil.disk_usage(path).free < 2 * 1024**3:
+                raise ValueError("Less than 2 GiB free on a deployment filesystem")
+        print("Health checks passed (includes SQL through application credentials).")
+
+    @contextlib.contextmanager
+    def maintenance(self):
+        active = [name for name in ("caddy", "nginx", "app") if name in self.running()]
+        containers = {name: self.dc("--profile", "https", "ps", "-q", name, stdout=subprocess.PIPE).stdout.decode().strip() for name in active}
+        try:
+            if active:
+                self.dc("stop", "--timeout", "30", *active)
+            yield
+        finally:
+            # Compose start can start dependencies, including the completed init job.
+            # Start exact existing container IDs to preserve mounts, ports and schema.
+            errors = []
+            for name in reversed(active):
+                try:
+                    run(["docker", "start", containers[name]], stdout=subprocess.DEVNULL)
+                except subprocess.CalledProcessError:
+                    errors.append(name)
+            if errors:
+                raise ValueError("Could not resume services after maintenance: " + ", ".join(errors))
+
+    def volume_tar(self, suffix, output, image):
+        with output.open("wb") as stream:
+            run(["docker", "run", "--rm", "--network", "none", "--user", "0", "--entrypoint", "tar",
+                 "--mount", f"type=volume,src={self.volume(suffix)},dst=/snapshot,readonly",
+                 image, "-C", "/snapshot", "-czf", "-", "."], stdout=stream)
+
+    def backup(self):
+        cfg = self.config()
+        private_file(self.directory / "backup.passphrase")
+        self.health()
+        destination = Path(self.args.destination).resolve()
+        destination.mkdir(parents=True, mode=0o700, exist_ok=True)
+        if destination.stat().st_mode & 0o077:
+            raise ValueError("Backup destination must have mode 0700")
+        output = destination / (time.strftime("devops-%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + secrets.token_hex(3) + ".tar.gz.gpg")
+        with tempfile.TemporaryDirectory(prefix=".oracle-backup-", dir=destination) as work:
+            work = Path(work)
+            with self.maintenance():
+                with (work / "mysql.sql").open("wb") as stream:
+                    self.dc("exec", "-T", "mysql", "sh", "-ec",
+                            'export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; exec mysqldump -uroot --single-transaction --quick --no-tablespaces --set-gtid-purged=OFF --databases "$MYSQL_DATABASE"', stdout=stream)
+                for suffix in VOLUMES[1:]:
+                    self.volume_tar(suffix, work / (suffix + ".tar.gz"), cfg["services"]["app"]["image"])
+                for name in ("app.env", "mysql.env", "deploy.env"):
+                    shutil.copyfile(self.directory / name, work / name)
+                metadata = {"release": EXPECTED_REVISION, "images": {name: item["image"] for name, item in cfg["services"].items()}, "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+                (work / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+                for path in work.iterdir():
+                    path.chmod(0o600)
+                (work / "checksums.json").write_text(json.dumps({p.name: checksum(p) for p in work.iterdir()}, sort_keys=True))
+            # Compress and encrypt after services have resumed. Encryption key is never archived.
+            archive = work / "backup.tar.gz"
+            with tarfile.open(archive, "w:gz") as tar:
+                for path in sorted(work.iterdir()):
+                    if path != archive:
+                        tar.add(path, arcname=path.name)
+            self.gpg(work, "--symmetric", "--cipher-algo", "AES256", "--output", str(output), str(archive))
+        output.chmod(0o600)
+        print(f"Encrypted backup: {output}")
+        print("Copy it off the VPS; retain backup.passphrase separately. Local backup alone is insufficient.")
+
+    def gpg(self, work, *arguments):
+        home = work / ".gnupg"
+        home.mkdir(mode=0o700)
+        try:
+            run(["gpg", "--no-options", "--homedir", str(home), "--batch", "--no-symkey-cache",
+                 "--pinentry-mode", "loopback", "--passphrase-file", str(self.directory / "backup.passphrase"),
+                 *arguments], stderr=subprocess.PIPE)
+        finally:
+            subprocess.run(["gpgconf", "--homedir", str(home), "--kill", "gpg-agent"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+    def restore(self):
+        if not self.args.confirm_empty:
+            raise ValueError("Restore requires --confirm-empty and refuses all existing target volumes")
+        private_file(self.directory / "backup.passphrase")
+        for suffix in VOLUMES:
+            result = subprocess.run(["docker", "volume", "inspect", self.volume(suffix)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if result.returncode == 0:
+                raise ValueError("Target volume already exists; use a fresh project/volume namespace")
+        with tempfile.TemporaryDirectory(prefix=".oracle-restore-", dir=self.directory) as temporary:
+            work = Path(temporary)
+            archive = work / "backup.tar.gz"
+            self.gpg(work, "--output", str(archive), "--decrypt", str(Path(self.args.archive).resolve()))
+            names = {"mysql.sql", "passport.tar.gz", "caddy_data.tar.gz", "caddy_config.tar.gz", "app.env", "mysql.env", "deploy.env", "metadata.json", "checksums.json"}
+            with tarfile.open(archive) as tar:
+                members = tar.getmembers()
+                if {item.name for item in members} != names or len(members) != len(names) or any(not item.isfile() for item in members):
+                    raise ValueError("Unexpected backup contents")
+                tar.extractall(work, filter="data")
+            checksums = json.loads((work / "checksums.json").read_text())
+            if set(checksums) != names - {"checksums.json"}:
+                raise ValueError("Incomplete checksum manifest")
+            for name, digest in checksums.items():
+                if checksum(work / name) != digest:
+                    raise ValueError("Backup integrity check failed")
+            metadata = json.loads((work / "metadata.json").read_text())
+            if metadata["release"] != EXPECTED_REVISION:
+                raise ValueError("Backup belongs to a different application release")
+            for name in ("app.env", "mysql.env", "deploy.env"):
+                target = self.directory / name
+                if target.exists():
+                    private_file(target)
+                    if target.read_bytes() != (work / name).read_bytes():
+                        raise ValueError("Existing configuration differs from backup; use a fresh secrets directory")
+            for name in ("app.env", "mysql.env", "deploy.env"):
+                if not (self.directory / name).exists():
+                    write_private(self.directory / name, (work / name).read_text())
+            cfg = self.config()
+            if metadata["images"] != {name: item["image"] for name, item in cfg["services"].items()}:
+                raise ValueError("Installed image references differ from the backup")
+            self.dc("pull", "mysql", "app", "nginx")
+            self.create_volumes()
+            self.dc("up", "-d", "--no-build", "--pull", "never", "--wait", "--wait-timeout", "600", "mysql")
+            with (work / "mysql.sql").open("rb") as stream:
+                self.dc("exec", "-T", "mysql", "sh", "-ec", 'export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; exec mysql -uroot', stdin=stream)
+            for suffix in VOLUMES[1:]:
+                with tarfile.open(work / (suffix + ".tar.gz")) as tar:
+                    if any(item.issym() or item.islnk() or not (item.isfile() or item.isdir()) or item.name.startswith("/") or ".." in Path(item.name).parts for item in tar.getmembers()):
+                        raise ValueError("Unsafe volume archive")
+                with (work / (suffix + ".tar.gz")).open("rb") as stream:
+                    command = "tar -xzf - -C /restore"
+                    if suffix == "passport":
+                        command += "; chown -R 82:82 /restore; chmod 700 /restore; chmod 600 /restore/oauth-*.key"
+                    run(["docker", "run", "--rm", "-i", "--network", "none", "--user", "0", "--entrypoint", "sh", "--mount",
+                         f"type=volume,src={self.volume(suffix)},dst=/restore", cfg["services"]["app"]["image"], "-ec", command], stdin=stream)
+            self.dc("up", "-d", "--no-build", "--pull", "never", "--wait", "--wait-timeout", "600")
+            self.health()
+        print("Restored into fresh volumes; public HTTPS remains disabled.")
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--secrets-dir", default="/etc/devops-tp")
+    parser.add_argument("--project", default="devops-tp-prod")
+    parser.add_argument("--https-url", help="Optional external HTTPS /up probe for health")
+    commands = parser.add_subparsers(dest="command", required=True)
+    package = commands.add_parser("package", help="Build an allowlisted deployment tar outside the checkout")
+    package.add_argument("--output", required=True)
+    prepare = commands.add_parser("prepare")
+    prepare.add_argument("--domain", required=True)
+    prepare.add_argument("--email", required=True)
+    prepare.add_argument("--proxy-subnet", default="172.30.77.0/24")
+    prepare.add_argument("--giphy-key-file")
+    commands.add_parser("init")
+    commands.add_parser("health")
+    user = commands.add_parser("provision-user")
+    user.add_argument("--stdin", action="store_true", help="Read JSON credentials from stdin, never argv")
+    backup = commands.add_parser("backup")
+    backup.add_argument("--destination", default="/var/backups/devops-tp")
+    restore = commands.add_parser("restore")
+    restore.add_argument("archive")
+    restore.add_argument("--confirm-empty", action="store_true")
+    args = parser.parse_args()
+    ops = Operations(args)
+    # Serialize operations per secrets directory, including health and backup timers.
+    # prepare creates the directory itself; other commands lock an existing one.
+    if args.command == "package":
+        ops.package()
+        return
+    if args.command == "prepare":
+        ops.prepare()
+        return
+    if ops.directory.stat().st_mode & 0o077 or ops.directory.stat().st_uid != os.geteuid():
+        raise ValueError("Secrets directory must belong to the invoking user and have mode 0700")
+    private_file(ops.directory / "backup.passphrase")
+    descriptor = os.open(ops.directory / ".operation.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        {"init": ops.initialize, "health": ops.health, "provision-user": ops.provision_user,
+         "backup": ops.backup, "restore": ops.restore}[args.command]()
+
+
+if __name__ == "__main__":
+    # systemd timeout/stop sends SIGTERM; unwind maintenance and restart consumers.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+    try:
+        main()
+    except (ValueError, OSError, subprocess.CalledProcessError, KeyError, tarfile.TarError) as error:
+        if isinstance(error, subprocess.CalledProcessError):
+            print("Operation failed in a child process; credentials and captured output were withheld.", file=sys.stderr)
+        else:
+            print(f"Operation failed: {error}", file=sys.stderr)
+        sys.exit(1)

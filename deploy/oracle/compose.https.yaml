@@ -1,0 +1,6 @@
+# Explicit, future opt-in. Never used by init, health, backup or local tests.
+services:
+  caddy:
+    ports:
+      - "${PUBLIC_BIND_IP:?Explicitly choose the public bind address}:80:80/tcp"
+      - "${PUBLIC_BIND_IP}:443:443/tcp"
