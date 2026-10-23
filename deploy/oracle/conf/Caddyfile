@@ -1,0 +1,26 @@
+{
+    email {$ACME_EMAIL}
+    # Never log request objects containing URI, headers or credentials on errors.
+    log default {
+        exclude http.log.error
+        level WARN
+    }
+}
+
+{$DOMAIN} {
+    tls {
+        protocols tls1.2 tls1.3
+    }
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+    reverse_proxy nginx:8080 {
+        header_up Host {$DOMAIN}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Port 443
+        header_up -Forwarded
+    }
+}

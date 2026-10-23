@@ -1,0 +1,12 @@
+[Unit]
+Description=Check devops-tp application, SQL and Passport
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/opt/devops-tp/bin/oracle health
+TimeoutStartSec=120
+Nice=10

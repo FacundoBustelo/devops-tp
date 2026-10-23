@@ -45,10 +45,26 @@ jobs:
           persist-credentials: false
       - run: bash scripts/ci/check-observability.sh
 
+  oracle:
+    name: Oracle deployment
+    # The release workflow reuses this file with its original push event.
+    # Published 1.1.0 deployment checks belong to PR validation, not publication.
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Validate Compose and secret boundaries
+        run: python3 -B -m unittest discover -s tests/oracle -v
+      - name: Test published images, proxy, persistence and encrypted restore
+        run: python3 -B scripts/ci/check-oracle.py
+
   required:
     name: CI Required
     if: ${{ always() }}
-    needs: [quality, phpunit, observability]
+    needs: [quality, phpunit, observability, oracle]
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
@@ -57,4 +73,12 @@ jobs:
           QUALITY: ${{ needs.quality.result }}
           PHPUNIT: ${{ needs.phpunit.result }}
           OBSERVABILITY: ${{ needs.observability.result }}
-        run: test "$QUALITY" = success && test "$PHPUNIT" = success && test "$OBSERVABILITY" = success
+          ORACLE: ${{ needs.oracle.result }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          test "$QUALITY" = success && test "$PHPUNIT" = success && test "$OBSERVABILITY" = success || exit 1
+          if [ "$EVENT_NAME" = pull_request ]; then
+            test "$ORACLE" = success
+          else
+            test "$ORACLE" = skipped
+          fi
